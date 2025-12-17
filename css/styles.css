@@ -1,0 +1,106 @@
+/* Override default blue with #B31B1B */
+.skin-blue .main-header .navbar {
+  background-color: #B31B1B;
+}
+.skin-blue .main-header .logo {
+  background-color: #B31B1B;
+}
+.skin-blue .main-header .logo:hover {
+  background-color: #B31B1B;
+}
+.skin-blue .main-sidebar .sidebar .sidebar-menu .active a {
+  background-color: #B31B1B;
+}
+.skin-blue .main-sidebar .sidebar .sidebar-menu a:hover {
+  background-color: #B31B1B;
+}
+.btn-primary {
+  background-color: #B31B1B !important;
+  border-color: #B31B1B !important;
+  color: #FFFFFF !important;
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.btn-primary:not(:disabled):not(.disabled):active,
+.btn-primary:not(:disabled):not(.disabled).active,
+.show > .btn-primary.dropdown-toggle {
+  background-color: #8B1515 !important;
+  border-color: #8B1515 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 0 0.2rem rgba(179, 27, 27, 0.5) !important;
+}
+.btn-primary:focus,
+.btn-primary.focus {
+  box-shadow: 0 0 0 0.2rem rgba(179, 27, 27, 0.5) !important;
+}
+
+/* Style Back button specifically - light gray */
+#back_q1.btn-default {
+  background-color: #e0e0e0 !important;
+  border-color: #d0d0d0 !important;
+  color: #333333 !important;
+}
+#back_q1.btn-default:hover,
+#back_q1.btn-default:focus,
+#back_q1.btn-default:active,
+#back_q1.btn-default.active {
+  background-color: #d0d0d0 !important;
+  border-color: #c0c0c0 !important;
+  color: #333333 !important;
+}
+
+/* Style file upload progress bar */
+.shiny-file-input-progress .progress-bar {
+  background-color: #B31B1B !important;
+}
+
+.shiny-file-input-progress .bar {
+  background-color: #B31B1B !important;
+}
+
+/* Style file input container */
+.shiny-input-container .btn-file {
+  background-color: #B31B1B !important;
+  border-color: #B31B1B !important;
+  color: #FFFFFF !important;
+}
+
+.shiny-input-container .btn-file:hover {
+  background-color: #8B1515 !important;
+  border-color: #8B1515 !important;
+  color: #FFFFFF !important;
+}
+
+/* Style file input progress and status */
+.shiny-file-input-progress .progress {
+  background-color: #f0f0f0 !important;
+}
+
+/* Active upload progress bar stays red (but will be overridden when complete) */
+.shiny-file-input-progress .progress-bar:not(.progress-bar-success) {
+  background-color: #B31B1B !important;
+}
+
+.shiny-file-input-progress .bar:not([style*="100%"]) {
+  background-color: #B31B1B !important;
+}
+
+/* Upload complete indicator - light gray (must come after general rules) */
+.shiny-file-input-progress .progress-bar-success,
+.shiny-file-input-progress .progress-bar.progress-bar-success,
+.shiny-file-input-progress .bar[style*="100%"],
+.shiny-file-input-progress .progress-bar[aria-valuenow="100"],
+.progress-bar-success {
+  background-color: #e0e0e0 !important;
+}
+
+/* Completed file upload text - gray */
+.shiny-file-input-progress .text-success,
+.shiny-file-input-progress .text-muted,
+.input-group .text-success {
+  color: #666666 !important;
+}
+
+
