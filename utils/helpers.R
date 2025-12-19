@@ -194,7 +194,7 @@ process_csv_file <- function(file) {
 create_summary_row <- function(stage_label, data_type, source, mean, sd, unit) {
   mean_val <- ifelse(is.numeric(mean) && !is.na(mean), mean, "N/A")
   sd_val <- ifelse(is.numeric(sd) && !is.na(sd), sd, "N/A")
-  
+
   data.frame(
     `Supply Chain Stage` = stage_label,
     `Data Type` = data_type,
@@ -205,5 +205,31 @@ create_summary_row <- function(stage_label, data_type, source, mean, sd, unit) {
     stringsAsFactors = FALSE,
     check.names = FALSE
   )
+}
+
+# Get human-readable label for a supply chain stage
+# @param stage Character string identifying the supply chain stage (internal name)
+# @return Character string with human-readable stage label
+get_stage_label <- function(stage) {
+  stage_labels <- c(
+    "processing_facility" = "Processing Facility",
+    "transportation_facility_to_retail" = "Transportation from facility to retail",
+    "retail" = "Retail",
+    "transportation_retail_to_home" = "Transportation from retail to home",
+    "consumer" = "Consumer"
+  )
+  
+  if (stage %in% names(stage_labels)) {
+    return(stage_labels[[stage]])
+  } else {
+    return(stage)  # Return original if not found
+  }
+}
+
+# Get all supply chain stage names
+# @return Character vector of all stage internal names
+get_all_stages <- function() {
+  c("processing_facility", "transportation_facility_to_retail", "retail", 
+    "transportation_retail_to_home", "consumer")
 }
 

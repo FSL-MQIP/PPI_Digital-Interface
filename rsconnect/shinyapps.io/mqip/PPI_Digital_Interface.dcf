@@ -1,0 +1,12 @@
+name: PPI_Digital_Interface
+title: PPI_Digital_Interface
+username: mqip
+account: mqip
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16337162
+bundleId: 11345628
+url: https://mqip.shinyapps.io/PPI_Digital_Interface/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
