@@ -22,7 +22,17 @@ source("utils/model_helpers.R")
 source("model/run_model.R")
 
 # Configure parallel processing for model
-plan(multisession, workers = 16)
+# Adaptive configuration: use sequential processing on shinyapps.io to avoid resource limits
+# shinyapps.io has limited resources and multisession plans can cause startup failures
+if (Sys.getenv("SHINY_PORT") != "") {
+  # Running on shinyapps.io - use sequential processing (safest option)
+  plan(sequential)
+} else {
+  # Running locally - use parallel processing with available cores
+  available_cores <- parallel::detectCores()
+  workers <- min(4, max(1, available_cores - 1))  # Use at most 4 workers, leave 1 core free
+  plan(multisession, workers = workers)
+}
 
 # Load input data
 ModelData_BCLc_input <- read_csv("input_data/ModelData_BCLc_input.csv", show_col_types = FALSE)
