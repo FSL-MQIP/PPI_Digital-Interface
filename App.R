@@ -629,6 +629,9 @@ server <- function(input, output, session) {
       `25th Percentile (%)` = round(result$p25 * 100, 2),
       `75th Percentile (%)` = round(result$p75 * 100, 2),
       `95th Percentile (%)` = round(result$p95 * 100, 2),
+      `Median Bacterial Concentration (log10 QBU/mL)` = round(result$Median_Bacterial_Concentration, 2),
+      `25th Percentile Bacterial Concentration (log10 QBU/mL)` = round(result$p25_Bacterial_Concentration, 2),
+      `75th Percentile Bacterial Concentration (log10 QBU/mL)` = round(result$p75_Bacterial_Concentration, 2),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
