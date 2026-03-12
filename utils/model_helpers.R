@@ -470,7 +470,7 @@ assign_category <- function(ModelData, genus_cat) {
 
 ## (11) fix_simulation
 
-fix_simulation <- function(sim) {
+fix_simulation <- function(sim, row_run) {
   if (nrow(sim) < row_run) {
     # Remove last row (assumed to be decimal time)
     sim_fixed <- sim[-nrow(sim), ]

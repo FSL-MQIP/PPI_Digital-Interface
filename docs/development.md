@@ -27,3 +27,23 @@ A comprehensive code review was performed comparing the Shiny app implementation
 - **Time SD hardcoded to 0** for user uploads — removes variability from user-supplied stages
 
 These remain open for future fixes (tracked in kanban).
+
+## 2026-03-12: Fixed duplicate Day column and fix_simulation global variable
+
+**Duplicate Day column:** `calculate_spoil_stats` in `run_model.R` had `group_by(Day)` on `Bacterial_Concentration_Stats` which served two purposes: overriding the upstream `rowwise()` grouping (line 405) and adding a `Day` column that duplicated the one in `SpoilStats`. Replaced with `ungroup()` before `summarise` — clears the rowwise grouping without the duplicate column.
+
+**fix_simulation global variable:** `fix_simulation()` in `model_helpers.R` relied on `row_run` from the calling environment, which `run_model.R` injected via `assign("row_run", ..., envir = .GlobalEnv)`. This is fragile and pollutes the global environment. Changed `fix_simulation` to accept `row_run` as an explicit parameter, and replaced the wrapper function with a direct `map` call.
+
+## 2026-03-12: BCLc now uses t_H column for consumer stage duration
+
+Previously, `simulate_growth_row` for BCLc bacteria derived consumer stage duration as `t_H_total - sum(other stage durations)`, ignoring the actual `t_H` column in the data. This meant user-uploaded consumer time data had no effect on BCLc growth — only the D model respected it.
+
+Changed `simulate_growth_row` to read `t_H` directly from the row data, consistent with how the D model uses it. With the pre-built data (`t_H=40`), results at days 7–35 are unchanged because `time_in_stage` clamps to the simulation window. But user-uploaded consumer time will now be properly used by both growth models.
+
+## 2026-03-12: Reorganized model tab layout — input left, output right
+
+Restructured the Model tab from a sidebar+main panel layout (where inputs, uploads, summary, and results were mixed) into a clear two-column layout:
+- **Left column (width 5):** Preliminary questions box + supply chain data input box (file uploads and Predict button)
+- **Right column (width 7):** Summary box (collapsible) + Spoilage Statistics box
+
+Split the single `prediction_section` renderUI into two: `input_section` (left) and `output_section` (right). Used shinydashboard `box()` with headers for visual grouping. Box headers use Cornell red (`status = "danger"` with CSS override to #B31B1B). Spoilage statistics table wrapped in `overflow-x: auto` for horizontal scrolling, and column names shortened (e.g., "Median Bacterial Concentration (log10 QBU/mL)" → "Median QBU").

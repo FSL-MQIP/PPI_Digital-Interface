@@ -43,7 +43,7 @@ ModelData_D_input <- read_csv("input_data/ModelData_D_input.csv", show_col_types
 
 # Define the UI
 ui <- dashboardPage(
-  skin = "blue",
+  skin = "red",
   dashboardHeader(
     title = tags$span(style = "font-size: 18px;", "Milk Shelf-life Predictor")
   ),
@@ -100,51 +100,23 @@ ui <- dashboardPage(
       tabItem(
         tabName = "model",
         fluidRow(
-          sidebarPanel(
-            width = 4,
-            h3("Preliminary Questions"),
-            
-            # Question 1: Microbial concentration in raw milk
-            # COMMENTED OUT - Using default values for now
-            # h4("Question 1: Microbial Concentration"),
-            # radioButtons(
-            #   inputId = "has_microbial_data",
-            #   label = "Do you have APC (Aerobic Plate Count) data in bulk tank raw milk?",
-            #   choices = list("Yes" = "yes", "No" = "no"),
-            #   selected = character(0)
-            # ),
-            # 
-            # # If yes, show mean and SD inputs
-            # conditionalPanel(
-            #   condition = "input.has_microbial_data == 'yes'",
-            #   fluidRow(
-            #     column(6, numericInput(
-            #       inputId = "mean_microbial",
-            #       label = "Mean:",
-            #       value = NULL
-            #     )),
-            #     column(6, numericInput(
-            #       inputId = "sd_microbial",
-            #       label = "Standard Deviation:",
-            #       value = NULL
-            #     ))
-            #   )
-            # ),
-            # 
-            # # If no, show default message
-            # conditionalPanel(
-            #   condition = "input.has_microbial_data == 'no'",
-            #   p(em("Using default values")),
-            #   br()
-            # ),
-            
-            # Question 2: Temperature data on supply chain stages
-            uiOutput("question2_ui")
+          # Left panel: inputs and submission
+          column(
+            width = 5,
+            box(
+              width = 12,
+              title = "Preliminary Questions",
+              status = "danger",
+              solidHeader = TRUE,
+              uiOutput("question2_ui")
+            ),
+            uiOutput("input_section")
           ),
-          
-          mainPanel(
-            width = 8,
-            uiOutput("prediction_section")
+
+          # Right panel: summary and results
+          column(
+            width = 7,
+            uiOutput("output_section")
           )
         )
       )
@@ -242,21 +214,44 @@ server <- function(input, output, session) {
     )
   })
   
-  # Render prediction section
-  output$prediction_section <- renderUI({
+  # Render input section (left panel: file uploads + submit)
+  output$input_section <- renderUI({
     if (!q2_completed()) {
       return(NULL)
     }
-    
-    tagList(
-      h4("Supply Chain Data Input"),
+
+    box(
+      width = 12,
+      title = "Supply Chain Data Input",
+      status = "danger",
+      solidHeader = TRUE,
       uiOutput("stage_panels"),
-      actionButton("submit", "Predict", class = "btn-primary"),
-      h4("Summary"),
-      tableOutput("summary_table"),
-      br(),
-      h4("Spoilage Statistics"),
-      uiOutput("spoil_stats_ui")
+      actionButton("submit", "Predict", class = "btn-primary")
+    )
+  })
+
+  # Render output section (right panel: summary + results)
+  output$output_section <- renderUI({
+    if (!q2_completed()) {
+      return(NULL)
+    }
+
+    tagList(
+      box(
+        width = 12,
+        title = "Summary",
+        status = "danger",
+        solidHeader = TRUE,
+        collapsible = TRUE,
+        tableOutput("summary_table")
+      ),
+      box(
+        width = 12,
+        title = "Spoilage Statistics",
+        status = "danger",
+        solidHeader = TRUE,
+        div(style = "overflow-x: auto;", uiOutput("spoil_stats_ui"))
+      )
     )
   })
   
@@ -619,13 +614,13 @@ server <- function(input, output, session) {
       `Median (%)` = round(result$Median_Proportion * 100, 2),
       `Mean (%)` = round(result$Mean_Proportion * 100, 2),
       `SD (%)` = round(result$SD_proportion * 100, 2),
-      `5th Percentile (%)` = round(result$p05 * 100, 2),
-      `25th Percentile (%)` = round(result$p25 * 100, 2),
-      `75th Percentile (%)` = round(result$p75 * 100, 2),
-      `95th Percentile (%)` = round(result$p95 * 100, 2),
-      `Median Bacterial Concentration (log10 QBU/mL)` = round(result$Median_Bacterial_Concentration, 2),
-      `25th Percentile Bacterial Concentration (log10 QBU/mL)` = round(result$p25_Bacterial_Concentration, 2),
-      `75th Percentile Bacterial Concentration (log10 QBU/mL)` = round(result$p75_Bacterial_Concentration, 2),
+      `P5 (%)` = round(result$p05 * 100, 2),
+      `P25 (%)` = round(result$p25 * 100, 2),
+      `P75 (%)` = round(result$p75 * 100, 2),
+      `P95 (%)` = round(result$p95 * 100, 2),
+      `Median QBU` = round(result$Median_Bacterial_Concentration, 2),
+      `P25 QBU` = round(result$p25_Bacterial_Concentration, 2),
+      `P75 QBU` = round(result$p75_Bacterial_Concentration, 2),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )

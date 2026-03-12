@@ -9,9 +9,7 @@ simulate_growth_row <- function(row_data, t_H_total) {
   t_T_val <- row_data$t_T[1]
   t_S_val <- row_data$t_S[1]
   t_T2_val <- row_data$t_T2[1]
-  dur1 <- c(t_F_val, t_T_val, t_S_val, t_T2_val)
-  # Calculate t_H_val as the remaining time to reach t_H_total
-  t_H_val <- t_H_total - sum(dur1)
+  t_H_val <- row_data$t_H[1]
   dur <- c(t_F_val, t_T_val, t_S_val, t_T2_val, t_H_val) # create vector from stage durations
   
   newGR_F_val <- row_data$newGR_F[1]
@@ -292,18 +290,10 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   # Run simulations in parallel
   all_simulations <- future_map(1:num_iterations, run_simulation)
   
-  # Fix simulation results - create a wrapper that has access to t_H
+  # Fix simulation results
   row_run <- t_H + 1  # Number of time points (0 to t_H)
-  
-  # Create a wrapper function for fix_simulation that uses the local row_run
-  fix_simulation_wrapper <- function(sim) {
-    # Temporarily assign row_run to global environment for fix_simulation to access
-    assign("row_run", row_run, envir = .GlobalEnv)
-    result <- fix_simulation(sim)
-    return(result)
-  }
-  
-  all_simulations_fixed <- map(all_simulations, fix_simulation_wrapper)
+
+  all_simulations_fixed <- map(all_simulations, ~ fix_simulation(.x, row_run))
   
   # Ensure each simulation has exactly row_run rows
   all_simulations_fixed <- map(all_simulations_fixed, function(sim) {
@@ -468,13 +458,13 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     
     
     Bacterial_Concentration_Stats <- results_day %>%
-      group_by(Day) %>%
+      ungroup() %>%
       summarise(
         Median_Bacterial_Concentration = median(log10sumN, na.rm = TRUE),
         p25_Bacterial_Concentration = quantile(log10sumN, 0.25, na.rm = TRUE),
         p75_Bacterial_Concentration = quantile(log10sumN, 0.75, na.rm = TRUE)
       )
-    
+
     Combined_Stats <- cbind(SpoilStats, Bacterial_Concentration_Stats)
     
     
