@@ -293,9 +293,17 @@ server <- function(input, output, session) {
       ),
       box(
         width = 12,
+        title = "Predicted Spoilage Over Time",
+        status = "danger",
+        solidHeader = TRUE,
+        plotOutput("spoilage_plot", height = "400px")
+      ),
+      box(
+        width = 12,
         title = "Spoilage Statistics",
         status = "danger",
         solidHeader = TRUE,
+        collapsible = TRUE,
         div(style = "overflow-x: auto;", uiOutput("spoil_stats_ui"))
       )
     )
@@ -688,6 +696,69 @@ server <- function(input, output, session) {
     })
   })
   
+  # Render spoilage plot
+  output$spoilage_plot <- renderPlot({
+    if (is.null(spoil_stats_result())) {
+      return(NULL)
+    }
+
+    result <- spoil_stats_result()
+    plot_data <- data.frame(
+      Day = as.numeric(result$Day),
+      Median = result$Median_Proportion * 100,
+      P25 = result$p25 * 100,
+      P75 = result$p75 * 100
+    )
+
+    # Interpolate to find shelf life day (where median crosses 25%)
+    shelf_life_day <- NA
+    if (any(plot_data$Median >= 25) && any(plot_data$Median < 25)) {
+      for (i in 2:nrow(plot_data)) {
+        if (plot_data$Median[i - 1] < 25 && plot_data$Median[i] >= 25) {
+          # Linear interpolation
+          shelf_life_day <- plot_data$Day[i - 1] +
+            (25 - plot_data$Median[i - 1]) /
+            (plot_data$Median[i] - plot_data$Median[i - 1]) *
+            (plot_data$Day[i] - plot_data$Day[i - 1])
+          break
+        }
+      }
+    }
+
+    p <- ggplot(plot_data, aes(x = Day)) +
+      geom_ribbon(aes(ymin = P25, ymax = P75), fill = "#B31B1B", alpha = 0.2) +
+      geom_line(aes(y = Median), color = "#B31B1B", linewidth = 1.2) +
+      geom_point(aes(y = Median), color = "#B31B1B", size = 3) +
+      geom_hline(yintercept = 25, linetype = "dashed", color = "#333333", linewidth = 0.7) +
+      annotate("text", x = min(plot_data$Day) + 1, y = 27,
+               label = "25% Shelf Life Threshold", hjust = 0, size = 3.5, color = "#333333") +
+      scale_x_continuous(breaks = plot_data$Day) +
+      scale_y_continuous(limits = c(0, max(100, max(plot_data$P75) + 5)),
+                         breaks = sort(unique(c(seq(0, 100, 25))))) +
+      labs(
+        x = "Day",
+        y = "Predicted Spoiled (%)",
+        caption = "Shaded region: 25th-75th percentile range"
+      ) +
+      theme_minimal(base_size = 14) +
+      theme(
+        plot.title = element_text(face = "bold"),
+        panel.grid.minor = element_blank()
+      )
+
+    # Add shelf life annotation if crossing exists
+    if (!is.na(shelf_life_day)) {
+      p <- p +
+        geom_vline(xintercept = shelf_life_day, linetype = "dotted", color = "#B31B1B", linewidth = 0.7) +
+        annotate("label", x = shelf_life_day, y = 5,
+                 label = paste0("Shelf Life: ~", round(shelf_life_day, 1), " days"),
+                 fill = "#B31B1B", color = "white", size = 3.5, fontface = "bold",
+                 label.padding = unit(0.4, "lines"))
+    }
+
+    p
+  })
+
   # Render spoilage statistics table
   output$spoil_stats_table <- renderTable({
     if (is.null(spoil_stats_result())) {
