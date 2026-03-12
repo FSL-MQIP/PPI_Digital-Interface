@@ -120,4 +120,39 @@ cat("  Output dimensions:", nrow(result3), "x", ncol(result3), "\n")
 cat("  Days:", paste(result3$Day, collapse=", "), "\n")
 print(result3)
 
+# --- Test: APC CSV processing ---
+cat("\n=== Test: APC CSV processing ===\n")
+apc_file <- list(datapath = "test_data/apc_measurements.csv")
+apc_result <- process_apc_csv(apc_file)
+cat("  Extracted mean:", apc_result$mean, "sd:", apc_result$sd, "(log10 CFU/mL)\n")
+stopifnot(!is.null(apc_result))
+stopifnot(apc_result$mean > 3 && apc_result$mean < 4)  # log10 of ~2100-5500 should be ~3.3-3.7
+cat("  APC CSV processing: PASSED\n")
+
+# --- Test 4: User APC data (custom microbial concentration) ---
+cat("\n=== Test 4: User APC data ===\n")
+cat("  Using custom APC: mean=4.0, sd=0.5 (higher than default 3.52)\n")
+
+# Store original N0 values for comparison
+orig_bclc_n0 <- ModelData_BCLc_input$log10N0
+orig_d_n0 <- ModelData_D_input$log10N0
+
+result4 <- run_spoilage_model(
+  ModelData_BCLc_input = ModelData_BCLc_input,
+  ModelData_D_input = ModelData_D_input,
+  stage_stats = NULL,
+  selected_stages = NULL,
+  apc_mean = 4.0,
+  apc_sd = 0.5,
+  progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
+)
+cat("  Output dimensions:", nrow(result4), "x", ncol(result4), "\n")
+cat("  Days:", paste(result4$Day, collapse=", "), "\n")
+print(result4)
+
+# Verify original data was NOT modified (immutability check)
+stopifnot(all.equal(orig_bclc_n0, ModelData_BCLc_input$log10N0))
+stopifnot(all.equal(orig_d_n0, ModelData_D_input$log10N0))
+cat("  Immutability check: PASSED (original data unchanged)\n")
+
 cat("\n=== All tests completed ===\n")
