@@ -2,6 +2,9 @@
 
 ## Backlog
 
+- Implement control strategies (intervention options to reduce spoilage)
+- Add environmental impact analysis (CO2 emissions associated with control strategies)
+
 
 ## In Progress
 
