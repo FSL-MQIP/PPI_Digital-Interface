@@ -427,7 +427,7 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   results_d7 <- subset(CombinedData_wide, Day == 7)
   results_d14 <- subset(CombinedData_wide, Day == 14)
   results_d21 <- subset(CombinedData_wide, Day == 21)
-  results_d28 <- subset(CombinedData_wide, Day == t_H)
+  results_d28 <- subset(CombinedData_wide, Day == 28)
   
   # Function to calculate spoilage summary statistics for a given day
   calculate_spoil_stats <- function(results_day, day_num) {
@@ -442,7 +442,10 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
           p05 = NA,
           p25 = NA,
           p75 = NA,
-          p95 = NA
+          p95 = NA, 
+          Median_Bacterial_Concentration = NA,
+          p25_Bacterial_Concentration = NA,
+          p75_Bacterial_Concentration = NA
         )
       ))
     }
@@ -470,7 +473,20 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
         p95 = quantile(Proportion_Spoiled, 0.95, na.rm = TRUE)
       )
     
-    return(list(Summary = SpoilSummary, Stats = SpoilStats))
+    
+    Bacterial_Concentration_Stats <- results_day %>%
+      group_by(Day) %>%
+      summarise(
+        Median_Bacterial_Concentration = median(log10sumN, na.rm = TRUE),
+        p25_Bacterial_Concentration = quantile(log10sumN, 0.25, na.rm = TRUE),
+        p75_Bacterial_Concentration = quantile(log10sumN, 0.75, na.rm = TRUE)
+      )
+    
+    Combined_Stats <- cbind(SpoilStats, Bacterial_Concentration_Stats)
+    
+    
+    
+    return(list(Summary = SpoilSummary, Stats = Combined_Stats))
   }
   
   if (!is.null(progress_callback)) {
@@ -481,7 +497,8 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   stats_d7 <- calculate_spoil_stats(results_d7, 7)
   stats_d14 <- calculate_spoil_stats(results_d14, 14)
   stats_d21 <- calculate_spoil_stats(results_d21, 21)
-  stats_d28 <- calculate_spoil_stats(results_d28, t_H)
+  stats_d28 <- calculate_spoil_stats(results_d28, 28)
+  
   
   # Combine all statistics
   SpoilStats_all <- rbind(
