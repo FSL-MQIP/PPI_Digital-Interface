@@ -56,7 +56,7 @@ simulate_growth_row <- function(row_data, t_H_total) {
   return(result_df)
 }
 
-run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_stats = NULL, selected_stages = NULL, t_H = NULL, progress_callback = NULL) {
+run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_stats = NULL, selected_stages = NULL, t_H = NULL, apc_mean = NULL, apc_sd = NULL, progress_callback = NULL) {
   
   # Set up progress reporting
   if (!is.null(progress_callback)) {
@@ -85,7 +85,52 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   # Create copies of input data for modification
   updated_data_bclc <- ModelData_BCLc_input
   updated_data_d <- ModelData_D_input
-  
+
+  # --- N0 Recalculation from User APC ---
+  # If user provided APC data, scale initial concentrations proportionally
+  # and re-apply Poisson sampling (see ADR 003)
+  if (!is.null(apc_mean) && !is.null(apc_sd)) {
+    recalculate_n0 <- function(data) {
+      lots <- unique(data$lot_id)
+
+      for (lot in lots) {
+        lot_mask <- data$lot_id == lot
+        original_cfu <- data$CFUlotini[lot_mask][1]
+
+        # Sample new lot-level APC from truncated normal (upper bound = 5 log10)
+        log10cfu_new <- truncnorm::rtruncnorm(1, mean = apc_mean, sd = apc_sd, b = 5)
+        cfu_new <- 10^log10cfu_new
+
+        # Proportional scale factor
+        scale_factor <- cfu_new / original_cfu
+
+        # Scale post-pasteurization CFU
+        data$CFUlotini[lot_mask] <- cfu_new
+        data$postpastCFU[lot_mask] <- data$postpastCFU[lot_mask] * scale_factor
+
+        # Re-compute expected per container (1900 mL)
+        data$exp_postpastcontainer[lot_mask] <- 1900 * data$postpastCFU[lot_mask]
+
+        # Re-do Poisson sampling per container
+        n_containers <- sum(lot_mask)
+        data$postpastcontainer[lot_mask] <- rpois(n_containers, data$exp_postpastcontainer[lot_mask])
+
+        # Derive N0 and log10N0
+        data$N0[lot_mask] <- data$postpastcontainer[lot_mask] / 1900
+        data$log10N0[lot_mask] <- ifelse(
+          data$postpastcontainer[lot_mask] > 0,
+          log10(data$N0[lot_mask]),
+          -Inf
+        )
+      }
+
+      data
+    }
+
+    updated_data_bclc <- recalculate_n0(updated_data_bclc)
+    updated_data_d <- recalculate_n0(updated_data_d)
+  }
+
   # Process each stage - only update columns where user submitted data
   all_stages <- c("processing_facility", "transportation_facility_to_retail", "retail", 
                   "transportation_retail_to_home", "consumer")
@@ -181,7 +226,13 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     # Create empty ModelData_nogrowth with required structure
     ModelData_nogrowth <- updated_data_bclc[0, ]
   }
-  
+
+  # Remove no-growth containers from BCLc data to avoid simulating them
+  if (nrow(ModelData_nogrowth) > 0 && "postpastcontainer" %in% names(updated_data_bclc)) {
+    updated_data_bclc <- updated_data_bclc %>%
+      filter(postpastcontainer >= 1, Growth_category != "A")
+  }
+
   # Create time series for no-growth data (if any exists)
   if (nrow(ModelData_nogrowth) > 0) {
     Day <- rep(0:t_H, times = nrow(ModelData_nogrowth))
