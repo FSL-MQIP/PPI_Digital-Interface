@@ -186,7 +186,15 @@ server <- function(input, output, session) {
         # CSV upload
         conditionalPanel(
           condition = "input.apc_input_method == 'csv'",
-          fileInput("apc_csv_file", "Upload APC measurements (CSV):", accept = ".csv"),
+          fileInput("apc_csv_file",
+            tagList(
+              "Upload APC measurements (CSV):",
+              tags$span(
+                icon("info-circle", style = "margin-left: 5px; color: #B31B1B; cursor: help;"),
+                title = "Required format: CSV file with one column of APC values (CFU/mL or log10 CFU/mL). Column name should be 'apc', 'cfu', or 'count'. Raw CFU/mL values will be automatically log10-transformed."
+              )
+            ),
+            accept = ".csv"),
           uiOutput("apc_csv_feedback")
         )
       ),
