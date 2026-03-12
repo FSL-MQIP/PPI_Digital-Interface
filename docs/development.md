@@ -47,3 +47,15 @@ Restructured the Model tab from a sidebar+main panel layout (where inputs, uploa
 - **Right column (width 7):** Summary box (collapsible) + Spoilage Statistics box
 
 Split the single `prediction_section` renderUI into two: `input_section` (left) and `output_section` (right). Used shinydashboard `box()` with headers for visual grouping. Box headers use Cornell red (`status = "danger"` with CSS override to #B31B1B). Spoilage statistics table wrapped in `overflow-x: auto` for horizontal scrolling, and column names shortened (e.g., "Median Bacterial Concentration (log10 QBU/mL)" → "Median QBU").
+
+## 2026-03-12: User APC Input Feature
+
+Added user-facing APC (Aerobic Plate Count) input as Q1 in the model workflow. Users can now:
+- Enter mean and SD of log10 CFU/mL manually
+- Upload a CSV of raw APC measurements (auto-fits normal distribution)
+- Or use defaults (mean=3.52, sd=0.70)
+
+The backend applies proportional scaling with Poisson re-sampling to adjust N0 in pre-generated data without re-running the full 10-step pipeline (see ADR 003). This preserves community composition, pasteurization effects, and stochastic container-level behavior while being fast enough for interactive use.
+
+Files modified: `App.R`, `model/run_model.R`, `utils/helpers.R`
+New test data: `test_data/apc_measurements.csv`
