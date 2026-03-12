@@ -229,7 +229,52 @@ get_stage_label <- function(stage) {
 # Get all supply chain stage names
 # @return Character vector of all stage internal names
 get_all_stages <- function() {
-  c("processing_facility", "transportation_facility_to_retail", "retail", 
+  c("processing_facility", "transportation_facility_to_retail", "retail",
     "transportation_retail_to_home", "consumer")
+}
+
+# Process uploaded APC CSV file and fit normal distribution
+# @param file Shiny fileInput object (must have $datapath)
+# @return List with mean and sd of log10 CFU/mL, or NULL on failure
+process_apc_csv <- function(file) {
+  if (is.null(file)) return(NULL)
+
+  tryCatch({
+    data <- read.csv(file$datapath, stringsAsFactors = FALSE)
+
+    # Find APC column (case-insensitive, matches "apc", "cfu", "count", or first numeric column)
+    apc_col <- grep("^apc$|^cfu$|^count$|^log10", names(data), ignore.case = TRUE, value = TRUE)
+    if (length(apc_col) == 0) {
+      # Fall back to first numeric column
+      numeric_cols <- sapply(data, is.numeric)
+      if (any(numeric_cols)) {
+        apc_col <- names(data)[which(numeric_cols)[1]]
+      } else {
+        return(NULL)
+      }
+    } else {
+      apc_col <- apc_col[1]
+    }
+
+    values <- as.numeric(data[[apc_col]])
+    values <- values[!is.na(values) & values > 0]
+    if (length(values) < 2) return(NULL)
+
+    # Determine if values are already log10-transformed
+    # Raw CFU/mL values are typically > 10; log10 values are typically < 10
+    if (max(values) > 10) {
+      # Assume raw CFU/mL — convert to log10
+      values <- log10(values)
+    }
+
+    # Fit normal distribution to log10 values
+    fit <- fitdistrplus::fitdist(values, "norm")
+    list(
+      mean = round(fit$estimate[["mean"]], 2),
+      sd = round(fit$estimate[["sd"]], 2)
+    )
+  }, error = function(e) {
+    NULL
+  })
 }
 
