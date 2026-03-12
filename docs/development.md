@@ -59,3 +59,13 @@ The backend applies proportional scaling with Poisson re-sampling to adjust N0 i
 
 Files modified: `App.R`, `model/run_model.R`, `utils/helpers.R`
 New test data: `test_data/apc_measurements.csv`
+
+## 2026-03-12: Spoilage prediction plot
+
+Added a ggplot2 visualization to the output panel showing predicted spoiled % over time. Features:
+- Median spoiled % line with points at days 7, 14, 21, 28, 35
+- P25-P75 shaded ribbon showing interquartile range
+- Horizontal dashed line at 25% marking the shelf life threshold
+- When median crosses 25%, a vertical dotted line and label show the interpolated shelf life day
+
+Plot appears above the (now collapsible) spoilage statistics table.

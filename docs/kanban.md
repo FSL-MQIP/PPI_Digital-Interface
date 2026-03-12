@@ -2,10 +2,6 @@
 
 ## Backlog
 
-- Fix `adjustLag` dead code: `else` branch is overwritten regardless of `restartExp`
-- Remove or repurpose "Back" button (Q1 is commented out, button has no destination)
-- Eliminate redundant `process_csv_file` call in `renderTable` (already called in observer)
-- Investigate time SD=0 for user uploads — consider allowing user-specified SD or computing from data
 
 ## In Progress
 
@@ -20,3 +16,8 @@
 - (2026-03-12) Apply Cornell red theme consistently, fix progress bar color
 - (2026-03-12) Add mock test data and backend test script
 - (2026-03-12) User APC input: Q1 UI with manual entry and CSV upload, N0 recalculation with Poisson re-sampling
+- (2026-03-12) Add spoilage prediction plot with P25-P75 ribbon and shelf life marker
+- (2026-03-12) Fix `adjustLag` dead code
+- (2026-03-12) Back button now resets Q1 and Q2 (repurposed with APC feature)
+- (2026-03-12) Redundant `process_csv_file` call resolved
+- (2026-03-12) Time SD=0 for user uploads documented in ADR 002
