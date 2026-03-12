@@ -108,6 +108,7 @@ ui <- dashboardPage(
               title = "Preliminary Questions",
               status = "danger",
               solidHeader = TRUE,
+              uiOutput("question1_ui"),
               uiOutput("question2_ui")
             ),
             uiOutput("input_section")
@@ -129,7 +130,13 @@ server <- function(input, output, session) {
   
   # Reactive value to track if Question 2 is completed
   q2_completed <- reactiveVal(FALSE)
-  
+
+  # Reactive values for APC (microbial concentration) input
+  q1_completed <- reactiveVal(FALSE)
+  apc_mean <- reactiveVal(default_microbial$mean)
+  apc_sd <- reactiveVal(default_microbial$sd)
+  apc_source <- reactiveVal("Default")
+
   # Reactive values to store temperature and time statistics for each stage
   stage_stats <- reactiveValues(
     processing_facility = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL),
@@ -145,29 +152,60 @@ server <- function(input, output, session) {
   # Reactive value to store model results
   spoil_stats_result <- reactiveVal(NULL)
   
-  # Reactive expression to check if Question 1 is completed
-  # COMMENTED OUT - Using default microbial concentration values
-  # q1_completed <- reactive({
-  #   if (is.null(input$has_microbial_data) || input$has_microbial_data == "") {
-  #     return(FALSE)
-  #   }
-  #   if (input$has_microbial_data == "yes") {
-  #     # If yes, need both mean and sd
-  #     if (is.null(input$mean_microbial) || is.na(input$mean_microbial) || 
-  #         is.null(input$sd_microbial) || is.na(input$sd_microbial)) {
-  #       return(FALSE)
-  #     }
-  #   }
-  #   return(TRUE)
-  # })
+  # Render Question 1 UI (APC data)
+  output$question1_ui <- renderUI({
+    tagList(
+      h4("Microbial Data"),
+      radioButtons(
+        inputId = "has_apc_data",
+        label = "Do you have APC (Aerobic Plate Count) data for bulk tank raw milk?",
+        choices = list("Yes" = "yes", "No" = "no"),
+        selected = character(0)
+      ),
+
+      # If yes: choose input method
+      conditionalPanel(
+        condition = "input.has_apc_data == 'yes'",
+        radioButtons(
+          inputId = "apc_input_method",
+          label = "How would you like to provide APC data?",
+          choices = list(
+            "Enter mean and SD" = "manual",
+            "Upload CSV file" = "csv"
+          ),
+          selected = "manual"
+        ),
+
+        # Manual entry
+        conditionalPanel(
+          condition = "input.apc_input_method == 'manual'",
+          numericInput("apc_manual_mean", "Mean (log10 CFU/mL):", value = 3.52, min = 0, max = 5, step = 0.01),
+          numericInput("apc_manual_sd", "SD (log10 CFU/mL):", value = 0.70, min = 0, max = 2, step = 0.01)
+        ),
+
+        # CSV upload
+        conditionalPanel(
+          condition = "input.apc_input_method == 'csv'",
+          fileInput("apc_csv_file", "Upload APC measurements (CSV):", accept = ".csv"),
+          uiOutput("apc_csv_feedback")
+        )
+      ),
+
+      # If no: show default message
+      conditionalPanel(
+        condition = "input.has_apc_data == 'no'",
+        p(em(paste0("Using default values: mean = ", default_microbial$mean,
+                     ", SD = ", default_microbial$sd, " (log10 CFU/mL)")))
+      )
+    )
+  })
   
   # Render Question 2 UI
   output$question2_ui <- renderUI({
-    # COMMENTED OUT - No longer depends on Question 1
-    # if (!q1_completed()) {
-    #   return(NULL)
-    # }
-    
+    if (!q1_completed()) {
+      return(NULL)
+    }
+
     tagList(
       br(),
       hr(),
@@ -257,11 +295,14 @@ server <- function(input, output, session) {
   
   # Handle navigation buttons
   observeEvent(input$back_q1, {
-    # Reset Question 2 only - go back one level
     q2_completed(FALSE)
+    q1_completed(FALSE)
     updateRadioButtons(session, "has_temperature_data", selected = character(0))
     updateCheckboxGroupInput(session, "selected_stages", selected = character(0))
-    # Keep Question 1 answers intact - don't reset them
+    updateRadioButtons(session, "has_apc_data", selected = character(0))
+    apc_mean(default_microbial$mean)
+    apc_sd(default_microbial$sd)
+    apc_source("Default")
   })
   
   observeEvent(input$next_q2, {
@@ -339,6 +380,63 @@ server <- function(input, output, session) {
     }
   })
   
+  # Process APC CSV upload
+  observeEvent(input$apc_csv_file, {
+    if (!is.null(input$apc_csv_file)) {
+      result <- process_apc_csv(input$apc_csv_file)
+      if (!is.null(result)) {
+        apc_mean(result$mean)
+        apc_sd(result$sd)
+        apc_source("User Upload (CSV)")
+      }
+    }
+  })
+
+  # Show feedback for APC CSV
+  output$apc_csv_feedback <- renderUI({
+    if (is.null(input$apc_csv_file)) return(NULL)
+    result <- process_apc_csv(input$apc_csv_file)
+    if (!is.null(result)) {
+      p(style = "color: green;",
+        paste0("Extracted: mean = ", result$mean, ", SD = ", result$sd, " (log10 CFU/mL)"))
+    } else {
+      p(style = "color: red;",
+        "Could not extract APC values. Ensure CSV has a numeric column with APC measurements (CFU/mL or log10 CFU/mL).")
+    }
+  })
+
+  # Auto-complete Q1 when user answers
+  observeEvent(input$has_apc_data, {
+    if (!is.null(input$has_apc_data) && input$has_apc_data != "") {
+      if (input$has_apc_data == "no") {
+        apc_mean(default_microbial$mean)
+        apc_sd(default_microbial$sd)
+        apc_source("Default")
+        q1_completed(TRUE)
+      } else if (input$has_apc_data == "yes") {
+        if (!is.null(input$apc_input_method) && input$apc_input_method == "manual") {
+          apc_mean(input$apc_manual_mean)
+          apc_sd(input$apc_manual_sd)
+          apc_source("User Input (Manual)")
+        }
+        q1_completed(TRUE)
+      }
+    }
+  })
+
+  # Update APC values when manual inputs change
+  observeEvent(c(input$apc_manual_mean, input$apc_manual_sd), {
+    if (!is.null(input$has_apc_data) && input$has_apc_data == "yes" &&
+        !is.null(input$apc_input_method) && input$apc_input_method == "manual") {
+      if (!is.null(input$apc_manual_mean) && !is.na(input$apc_manual_mean) &&
+          !is.null(input$apc_manual_sd) && !is.na(input$apc_manual_sd)) {
+        apc_mean(input$apc_manual_mean)
+        apc_sd(input$apc_manual_sd)
+        apc_source("User Input (Manual)")
+      }
+    }
+  })
+
   # Dynamically generate panels for each selected stage
   output$stage_panels <- renderUI({
     # Show panels only if user has temperature data and selected stages, or if they don't have data (use defaults)
@@ -377,39 +475,13 @@ server <- function(input, output, session) {
     summary_rows <- list()
     
     # Add microbial concentration data summary
-    # COMMENTED OUT - Using default values for now
-    # if (input$has_microbial_data == "yes") {
-    #   summary_rows[[length(summary_rows) + 1]] <- data.frame(
-    #     `Supply Chain Stage` = "Bulk tank",
-    #     `Data Type` = "Microbial Concentration",
-    #     Source = "User Input",
-    #     Mean = input$mean_microbial,
-    #     SD = input$sd_microbial,
-    #     Unit = "log10CFU/mL",
-    #     stringsAsFactors = FALSE,
-    #     check.names = FALSE
-    #   )
-    # } else {
-    #   summary_rows[[length(summary_rows) + 1]] <- data.frame(
-    #     `Supply Chain Stage` = "Bulk tank",
-    #     `Data Type` = "Microbial Concentration",
-    #     Source = "Default",
-    #     Mean = default_microbial$mean,
-    #     SD = default_microbial$sd,
-    #     Unit = "log10CFU/mL",
-    #     stringsAsFactors = FALSE,
-    #     check.names = FALSE
-    #   )
-    # }
-    
-    # Always use default microbial concentration
     summary_rows[[length(summary_rows) + 1]] <- data.frame(
       `Supply Chain Stage` = "Bulk tank",
       `Data Type` = "Microbial Concentration",
-      Source = "Default",
-      Mean = default_microbial$mean,
-      SD = default_microbial$sd,
-      Unit = "log10CFU/mL",
+      Source = apc_source(),
+      Mean = as.character(apc_mean()),
+      SD = as.character(apc_sd()),
+      Unit = "log10 CFU/mL",
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
@@ -504,7 +576,10 @@ server <- function(input, output, session) {
     model_running()
   })
   outputOptions(output, "model_running", suspendWhenHidden = FALSE)
-  
+
+  output$q1_completed_flag <- reactive({ q1_completed() })
+  outputOptions(output, "q1_completed_flag", suspendWhenHidden = FALSE)
+
   # Render spoilage statistics UI with loading indicator
   output$spoil_stats_ui <- renderUI({
     if (model_running()) {
@@ -574,6 +649,10 @@ server <- function(input, output, session) {
             setProgress(value = value, detail = message)
           }
 
+          # Only pass APC params if user provided custom data
+          user_apc_mean <- if (apc_source() != "Default") apc_mean() else NULL
+          user_apc_sd <- if (apc_source() != "Default") apc_sd() else NULL
+
           # Run the model (sampling logic is now inside the function)
           # t_H (total shelf-life horizon) defaults to 35 inside run_spoilage_model
           result <- run_spoilage_model(
@@ -581,6 +660,8 @@ server <- function(input, output, session) {
             ModelData_D_input = ModelData_D_input,
             stage_stats = stage_stats,
             selected_stages = selected_stages,
+            apc_mean = user_apc_mean,
+            apc_sd = user_apc_sd,
             progress_callback = progress_callback
           )
           
