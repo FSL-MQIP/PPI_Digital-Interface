@@ -562,18 +562,12 @@ server <- function(input, output, session) {
     model_running(TRUE)
     spoil_stats_result(NULL)
     
-    # Get t_H from stage_stats$consumer$time_mean
-    t_H_value <- NULL
-    if (!is.null(stage_stats$consumer) && !is.null(stage_stats$consumer$time_mean) && stage_stats$consumer$time_mean != "N/A") {
-      t_H_value <- as.numeric(stage_stats$consumer$time_mean)
-    }
-    
     # Get selected stages (stages with user-submitted data)
     selected_stages <- NULL
     if (input$has_temperature_data == "yes" && !is.null(input$selected_stages) && length(input$selected_stages) > 0) {
       selected_stages <- input$selected_stages
     }
-    
+
     # Run the model with progress tracking
     tryCatch({
       withProgress(
@@ -584,14 +578,14 @@ server <- function(input, output, session) {
           progress_callback <- function(message, value) {
             setProgress(value = value, detail = message)
           }
-          
+
           # Run the model (sampling logic is now inside the function)
+          # t_H (total shelf-life horizon) defaults to 35 inside run_spoilage_model
           result <- run_spoilage_model(
             ModelData_BCLc_input = ModelData_BCLc_input,
             ModelData_D_input = ModelData_D_input,
             stage_stats = stage_stats,
             selected_stages = selected_stages,
-            t_H = t_H_value,
             progress_callback = progress_callback
           )
           

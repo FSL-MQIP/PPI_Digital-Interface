@@ -65,19 +65,11 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     progress_callback(message = "Initializing model...", value = 0.1)
   }
   
-  # Get t_H from parameter or default
+  # Total shelf-life simulation horizon (days from start of supply chain)
+  # This is distinct from consumer stage duration — it defines how many days
+  # the simulation runs so we can report results at days 7, 14, 21, 28, 35
   if (is.null(t_H)) {
-    if (!is.null(stage_stats) && !is.null(stage_stats$consumer) && !is.null(stage_stats$consumer$time_mean) && stage_stats$consumer$time_mean != "N/A") {
-      t_H <- as.numeric(stage_stats$consumer$time_mean)
-    } else {
-      # Use default from default_parameters
-      if (exists("get_default_params")) {
-        time_params <- get_default_params("consumer", "time")
-        t_H <- as.numeric(time_params$mean)
-      } else {
-        t_H <- 28  # Fallback default
-      }
-    }
+    t_H <- 35
   }
   
   # Convert t_H to integer (round to nearest integer for non-integer values)
@@ -428,6 +420,7 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   results_d14 <- subset(CombinedData_wide, Day == 14)
   results_d21 <- subset(CombinedData_wide, Day == 21)
   results_d28 <- subset(CombinedData_wide, Day == 28)
+  results_d35 <- subset(CombinedData_wide, Day == 35)
   
   # Function to calculate spoilage summary statistics for a given day
   calculate_spoil_stats <- function(results_day, day_num) {
@@ -498,14 +491,15 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   stats_d14 <- calculate_spoil_stats(results_d14, 14)
   stats_d21 <- calculate_spoil_stats(results_d21, 21)
   stats_d28 <- calculate_spoil_stats(results_d28, 28)
-  
-  
+  stats_d35 <- calculate_spoil_stats(results_d35, 35)
+
   # Combine all statistics
   SpoilStats_all <- rbind(
     stats_d7$Stats,
     stats_d14$Stats,
     stats_d21$Stats,
-    stats_d28$Stats
+    stats_d28$Stats,
+    stats_d35$Stats
   )
   
   if (!is.null(progress_callback)) {
