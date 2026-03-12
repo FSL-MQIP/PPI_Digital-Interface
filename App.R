@@ -64,9 +64,9 @@ ui <- dashboardPage(
       # Intro Tab
       tabItem(
         tabName = "intro",
-        h2("Model Overview"),
-        box(
-          width = 12,
+        fluidRow(
+          box(
+            width = 12,
           h3("Model Overview"),
           p("This model is a two-dimensional Monte Carlo simulation that predicts spoilage of HTST-pasteurized milk by explicitly modeling survival during pasteurization and subsequent growth of the bulk tank raw milk (BTRM) bacterial community across the supply chain. It integrates metagenomic-informed community composition, taxon-specific heat resistance (including spore-formers, thermodurics, and heat-sensitive taxa), and temperature-dependent growth to estimate lot-level spoilage risk over shelf life."),
           br(),
@@ -93,6 +93,7 @@ ui <- dashboardPage(
           p(tags$strong("Luke Qian"), " - Postdoctoral Associate. Email: ", tags$a(href = "mailto:cq87@cornell.edu", "cq87@cornell.edu")),
           p(tags$strong("Leonie Kemmerling"), " - Ph.D. Student. Email: ", tags$a(href = "mailto:lk483@cornell.edu", "lk483@cornell.edu")),
           p(tags$strong("Martin Wiedmann"), " - Gellert Family Professor in Food Safety. Email: ", tags$a(href = "mailto:mw16@cornell.edu", "mw16@cornell.edu"))
+          )
         )
       ),
       
