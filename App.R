@@ -160,7 +160,7 @@ server <- function(input, output, session) {
   q1_completed <- reactiveVal(FALSE)
   apc_mean <- reactiveVal(default_microbial$mean)
   apc_sd <- reactiveVal(default_microbial$sd)
-  apc_source <- reactiveVal("Default Baseline")
+  apc_source <- reactiveVal("Baseline")
 
   # Reactive values to store temperature and time statistics for each stage
   stage_stats <- reactiveValues(
@@ -356,7 +356,7 @@ server <- function(input, output, session) {
     updateRadioButtons(session, "has_apc_data", selected = character(0))
     apc_mean(default_microbial$mean)
     apc_sd(default_microbial$sd)
-    apc_source("Default Baseline")
+    apc_source("Baseline")
   })
   
   observeEvent(input$next_q2, {
@@ -470,7 +470,7 @@ server <- function(input, output, session) {
       if (input$has_apc_data == "no") {
         apc_mean(default_microbial$mean)
         apc_sd(default_microbial$sd)
-        apc_source("Default Baseline")
+        apc_source("Baseline")
         q1_completed(TRUE)
       } else if (input$has_apc_data == "yes") {
         if (!is.null(input$apc_input_method) && input$apc_input_method == "manual") {
@@ -555,7 +555,7 @@ server <- function(input, output, session) {
         if (stage %in% input$selected_stages) {
           # Stage was selected - check if file was uploaded
           file <- input[[paste0("csv_file_", stage)]]
-          source <- ifelse(!is.null(file), "User Upload", "Default Baseline")
+          source <- ifelse(!is.null(file), "User Upload", "Baseline")
           
           # Extract temperature and time data from uploaded CSV file
           temp_mean <- "N/A"
@@ -573,7 +573,7 @@ server <- function(input, output, session) {
           }
           
           # If no file uploaded but stage was selected, use defaults
-          if (source == "Default Baseline") {
+          if (source == "Baseline") {
             temp_params <- get_default_params(stage, "temperature")
             temp_mean <- temp_params$mean
             temp_sd <- temp_params$sd
@@ -583,7 +583,7 @@ server <- function(input, output, session) {
           }
         } else {
           # Stage was not selected - use default parameters
-          source <- "Default Baseline"
+          source <- "Baseline"
           temp_params <- get_default_params(stage, "temperature")
           temp_mean <- temp_params$mean
           temp_sd <- temp_params$sd
@@ -627,7 +627,7 @@ server <- function(input, output, session) {
         temp_params <- get_default_params(stage, "temperature")
         time_params <- get_default_params(stage, "time")
 
-        source <- "Default Baseline"
+        source <- "Baseline"
 
         # Check if a scenario overrides this stage
         scenario_key <- NULL
@@ -743,8 +743,8 @@ server <- function(input, output, session) {
           }
 
           # Only pass APC params if user provided custom data
-          user_apc_mean <- if (apc_source() != "Default Baseline") apc_mean() else NULL
-          user_apc_sd <- if (apc_source() != "Default Baseline") apc_sd() else NULL
+          user_apc_mean <- if (apc_source() != "Baseline") apc_mean() else NULL
+          user_apc_sd <- if (apc_source() != "Baseline") apc_sd() else NULL
 
           # Build scenario overrides (applied after user data in model)
           scenario_overrides <- list()
