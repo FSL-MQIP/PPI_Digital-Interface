@@ -134,8 +134,7 @@ ui <- dashboardPage(
               status = "danger",
               solidHeader = TRUE,
               uiOutput("question1_ui"),
-              uiOutput("question2_ui"),
-              uiOutput("question3_ui")
+              uiOutput("question2_ui")
             ),
             uiOutput("input_section")
           ),
@@ -156,7 +155,6 @@ server <- function(input, output, session) {
   
   # Reactive value to track if Question 2 is completed
   q2_completed <- reactiveVal(FALSE)
-  q3_completed <- reactiveVal(FALSE)
 
   # Reactive values for APC (microbial concentration) input
   q1_completed <- reactiveVal(FALSE)
@@ -277,6 +275,19 @@ server <- function(input, output, session) {
         br()
       ),
       
+      hr(),
+      h4("Disruption Scenarios (Optional)"),
+      selectInput("scenario_fs", "Facility Storage Scenario:",
+        choices = c("None (Baseline)" = "none",
+                    "S1: Storage Cooling System Disruption" = "s1",
+                    "S2: Delivery Delay" = "s2"),
+        selected = "none"),
+      selectInput("scenario_dl", "Delivery Scenario:",
+        choices = c("None (Baseline)" = "none",
+                    "S3: Temp Increase (Trunk Opening)" = "s3",
+                    "S4: Delivery Cooling System Disruption" = "s4"),
+        selected = "none"),
+
       # Navigation buttons for Question 2
       conditionalPanel(
         condition = "input.has_temperature_data != ''",
@@ -287,46 +298,9 @@ server <- function(input, output, session) {
     )
   })
 
-  # Render Question 3 UI (Disruption Scenarios)
-  output$question3_ui <- renderUI({
-    if (!q2_completed()) return(NULL)
-
-    tagList(
-      br(), hr(),
-      h4("Disruption Scenarios"),
-      p("Optionally select supply chain disruption scenarios to simulate:"),
-
-      selectInput(
-        "scenario_fs",
-        "Facility Storage Scenario:",
-        choices = c(
-          "None (Baseline)" = "none",
-          "S1: Storage Cooling System Disruption" = "s1",
-          "S2: Delivery Delay" = "s2"
-        ),
-        selected = "none"
-      ),
-
-      selectInput(
-        "scenario_dl",
-        "Delivery Scenario:",
-        choices = c(
-          "None (Baseline)" = "none",
-          "S3: Temp Increase (Trunk Opening)" = "s3",
-          "S4: Delivery Cooling System Disruption" = "s4"
-        ),
-        selected = "none"
-      ),
-
-      br(),
-      actionButton("back_q2", "Back", class = "btn-default"),
-      actionButton("next_q3", "Continue", class = "btn-primary")
-    )
-  })
-
   # Render input section (left panel: file uploads + submit)
   output$input_section <- renderUI({
-    if (!q3_completed()) {
+    if (!q2_completed()) {
       return(NULL)
     }
 
@@ -342,7 +316,7 @@ server <- function(input, output, session) {
 
   # Render output section (right panel: summary + results)
   output$output_section <- renderUI({
-    if (!q3_completed()) {
+    if (!q2_completed()) {
       return(NULL)
     }
 
@@ -375,7 +349,6 @@ server <- function(input, output, session) {
   
   # Handle navigation buttons
   observeEvent(input$back_q1, {
-    q3_completed(FALSE)
     q2_completed(FALSE)
     q1_completed(FALSE)
     updateRadioButtons(session, "has_temperature_data", selected = character(0))
@@ -408,19 +381,6 @@ server <- function(input, output, session) {
       }
     }
     q2_completed(TRUE)
-  })
-
-  # Q3 Continue
-  observeEvent(input$next_q3, {
-    q3_completed(TRUE)
-  })
-
-  # Q3 Back — reset Q3 and go back to Q2
-  observeEvent(input$back_q2, {
-    q3_completed(FALSE)
-    q2_completed(FALSE)
-    updateRadioButtons(session, "has_temperature_data", selected = character(0))
-    updateCheckboxGroupInput(session, "selected_stages", selected = character(0))
   })
 
   # Observe file uploads and extract statistics for each stage
@@ -783,22 +743,28 @@ server <- function(input, output, session) {
           user_apc_mean <- if (apc_source() != "Default") apc_mean() else NULL
           user_apc_sd <- if (apc_source() != "Default") apc_sd() else NULL
 
-          # Build effective profiles: baselines + scenario overrides
-          effective_profiles <- default_profiles
-
+          # Build scenario overrides (applied after user data in model)
+          scenario_overrides <- list()
           if (!is.null(input$scenario_fs) && input$scenario_fs != "none") {
             key <- input$scenario_fs
             if (!is.null(scenario_profiles[[key]])) {
-              stage <- scenario_profiles[[key]]$stage
-              effective_profiles[[stage]] <- scenario_profiles[[key]]$profile
+              scenario_overrides[[scenario_profiles[[key]]$stage]] <- scenario_profiles[[key]]$profile
             }
           }
-
           if (!is.null(input$scenario_dl) && input$scenario_dl != "none") {
             key <- input$scenario_dl
             if (!is.null(scenario_profiles[[key]])) {
-              stage <- scenario_profiles[[key]]$stage
-              effective_profiles[[stage]] <- scenario_profiles[[key]]$profile
+              scenario_overrides[[scenario_profiles[[key]]$stage]] <- scenario_profiles[[key]]$profile
+            }
+          }
+
+          # Warn if scenario overrides user data
+          for (stage in names(scenario_overrides)) {
+            if (!is.null(selected_stages) && stage %in% selected_stages) {
+              showNotification(
+                paste0("Note: Disruption scenario overrides your uploaded data for ", get_stage_label(stage), "."),
+                type = "warning", duration = 8
+              )
             }
           }
 
@@ -811,7 +777,8 @@ server <- function(input, output, session) {
             selected_stages = selected_stages,
             apc_mean = user_apc_mean,
             apc_sd = user_apc_sd,
-            default_profiles = effective_profiles,
+            default_profiles = default_profiles,
+            scenario_overrides = scenario_overrides,
             progress_callback = progress_callback
           )
           
