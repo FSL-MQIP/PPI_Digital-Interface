@@ -98,3 +98,23 @@ The D pathway ODE solver now uses these baseline profiles by default via `build_
 
 Files modified: `config/default_parameters.R`, `App.R`, `model/run_model.R`, `test_data/test_backend.R`
 Files renamed: 4 baseline CSV files in `input_data/`
+
+## 2026-03-14: Supply Chain Disruption Scenarios (S1-S4)
+
+Added 4 disruption scenarios as a new Q3 step in the UI workflow, after temperature data (Q2). Users select from two independent dropdowns:
+
+- **Facility Storage** (None / S1: Storage Cooling System Disruption / S2: Delivery Delay)
+- **Delivery** (None / S3: Temp Increase from Trunk Opening / S4: Delivery Cooling System Disruption)
+
+Scenarios are combinable — users can select one from each dropdown simultaneously since they affect different supply chain stages. Selected scenarios override the baseline temperature profile for their respective stage.
+
+Scenario CSV files were renamed for clarity:
+- `adjP1-A-S1 FS.csv` → `scenario_s1_storage_cooling_disruption.csv`
+- `adjP1-A-S2 FS.csv` → `scenario_s2_delivery_delay.csv`
+- `adjP1-A-S3 DL.csv` → `scenario_s3_trunk_opening.csv`
+- `adjP1-A-S4 DL.csv` → `scenario_s4_delivery_cooling_disruption.csv`
+
+No model changes needed — scenarios overlay the `default_profiles` parameter already supported by `run_spoilage_model()`.
+
+Files modified: `config/default_parameters.R`, `App.R`, `test_data/test_backend.R`
+Files renamed: 4 scenario CSV files in `input_data/`

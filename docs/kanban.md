@@ -26,3 +26,4 @@
 - (2026-03-12) Time SD=0 for user uploads documented in ADR 002
 - (2026-03-14) Dynamic temperature support: D pathway ODE solver uses hourly temperature profiles from uploaded CSVs
 - (2026-03-14) Baseline temperature profiles: replace static defaults with CSV data for 4 stages, rename files
+- (2026-03-14) Disruption scenarios: S1-S4 as combinable Q3 dropdowns, overlay baseline profiles
