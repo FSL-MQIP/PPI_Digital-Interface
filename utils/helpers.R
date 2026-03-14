@@ -161,26 +161,49 @@ extract_time_stats <- function(data) {
   return(list(mean = time_mean, sd = time_sd))
 }
 
+# Extract raw temperature time-series profile from CSV data
+# @param data Data frame containing the CSV data
+# @return Data frame with columns time_days and temperature, or NULL if insufficient data
+extract_temp_profile <- function(data) {
+  if (is.null(data) || nrow(data) == 0) return(NULL)
+
+  time_col <- grep("^time$", names(data), ignore.case = TRUE, value = TRUE)
+  temp_col <- grep("^temp", names(data), ignore.case = TRUE, value = TRUE)
+  if (length(time_col) == 0 || length(temp_col) == 0) return(NULL)
+
+  days <- parse_time_to_days(data[[time_col[1]]])
+  temps <- as.numeric(data[[temp_col[1]]])
+  valid <- which(!is.na(days) & !is.na(temps))
+  if (length(valid) < 2) return(NULL)
+
+  data.frame(
+    time_days = days[valid] - days[valid][1],
+    temperature = temps[valid]
+  )
+}
+
 # Process uploaded CSV file and extract statistics
 # @param file Shiny fileInput object
 # @return List with temperature and time statistics
 process_csv_file <- function(file) {
   temp_stats <- list(mean = "N/A", sd = "N/A")
   time_stats <- list(mean = "N/A", sd = "N/A")
-  
+  temp_profile <- NULL
+
   if (is.null(file)) {
-    return(list(temperature = temp_stats, time = time_stats))
+    return(list(temperature = temp_stats, time = time_stats, temp_profile = temp_profile))
   }
-  
+
   tryCatch({
     data <- read.csv(file$datapath, stringsAsFactors = FALSE)
     temp_stats <- extract_temperature_stats(data)
     time_stats <- extract_time_stats(data)
+    temp_profile <- extract_temp_profile(data)
   }, error = function(e) {
     # Keep default values on error
   })
-  
-  return(list(temperature = temp_stats, time = time_stats))
+
+  return(list(temperature = temp_stats, time = time_stats, temp_profile = temp_profile))
 }
 
 # Create a summary table row
