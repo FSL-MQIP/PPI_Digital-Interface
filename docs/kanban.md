@@ -3,13 +3,18 @@
 ## Backlog
 
 - Implement control strategies (intervention options to reduce spoilage)
-- Add environmental impact analysis (CO2 emissions associated with control strategies)
 
 
 ## In Progress
 
 
 ## Done
+
+- (2026-03-14) Add pre-consumer spoilage rate and consumer days-to-25% metrics as callout boxes
+- (2026-03-14) Remove shelf-life annotation from spoilage plot (replaced by metric callouts)
+- (2026-03-14) Restyle metric callout boxes to match Cornell red theme
+- (2026-03-14) Add economic loss and environmental emission callout boxes for scenario vs baseline comparison
+- (2026-03-14) Precompute baseline results to RDS for fast app startup
 
 - (2026-03-12) Extend simulation horizon from 28 to 35 days and restore Day 35 output
 - (2026-03-12) Fix duplicate `Day` column from `cbind(SpoilStats, Bacterial_Concentration_Stats)` in `run_model.R`

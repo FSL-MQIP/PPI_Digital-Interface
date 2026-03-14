@@ -126,3 +126,31 @@ Fixed scenario override precedence: when a user uploads temperature data AND sel
 Merged the Q3 disruption scenario step into Q2 — scenario dropdowns now appear directly in the temperature data question, eliminating the extra Continue/Back step. The model now receives `scenario_overrides` as a separate parameter applied after user data, ensuring correct precedence: defaults → user data → scenario overrides.
 
 Files modified: `model/run_model.R`, `App.R`, `test_data/test_backend.R`
+
+## 2026-03-14: Pre-consumer spoilage rate and consumer days-to-25% metrics
+
+Added two new supply-chain-aware metrics computed from `CombinedData_wide` in `run_model.R`:
+
+1. **Pre-consumer spoilage rate**: % of containers exceeding 6 log₁₀ CFU/mL at end of retail (Stage 3). Computed by interpolating each container's total bacterial concentration at `t_F + t_T + t_S` using surrounding integer-day values.
+
+2. **Consumer days to 25% spoilage**: Days from consumer home arrival (end of Stage 4) until 25% of containers exceed 6 log₁₀. For each container, the first crossing of 6 log is found via interpolation, then `consumer_start_day` is subtracted. The 25th percentile of these values gives the metric.
+
+Model return type changed from a bare data frame to `list(SpoilStats_all, pct_spoiled_at_retail, days_to_25pct_consumer)`. All consumers updated accordingly.
+
+Displayed as two callout boxes in the output panel, styled with `box(status = "danger", solidHeader = TRUE)` to match the Cornell red theme. The old shelf-life annotation (25% threshold line + vertical dotted line) was removed from the spoilage plot since these metrics replace it.
+
+Files modified: `model/run_model.R`, `App.R`, `test_data/test_backend.R`
+
+## 2026-03-14: Economic loss and environmental emission analysis
+
+Added scenario vs baseline comparison with two new callout boxes that appear when a disruption scenario is active:
+
+- **Economic Loss**: `(baseline_days - scenario_days) × $0.03/unit × containers_per_lot` (Lau et al., 2023). Shows baseline value, scenario value, and delta.
+- **Environmental Emission**: CO₂e computed using EPA WARM model factors — retail waste → landfill (0.55 kg CO₂e/L), consumer waste → wastewater (0.2 kg CO₂e/L). Evaluated at the baseline's overall shelf-life day (where Median_Proportion crosses 25%). Shows baseline, scenario, and delta.
+
+User input: containers per lot (default 1000 half-gallon containers). Half-gallon = 1.893 L.
+
+Baseline results are precomputed to `input_data/baseline_result.rds` via `scripts/precompute_baseline.R` and loaded at app startup with `readRDS()` for fast initialization. Regenerate with `Rscript scripts/precompute_baseline.R` if default parameters or input data change.
+
+Files modified: `App.R`
+Files added: `scripts/precompute_baseline.R`, `input_data/baseline_result.rds`
