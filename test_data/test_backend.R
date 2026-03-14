@@ -155,4 +155,59 @@ stopifnot(all.equal(orig_bclc_n0, ModelData_BCLc_input$log10N0))
 stopifnot(all.equal(orig_d_n0, ModelData_D_input$log10N0))
 cat("  Immutability check: PASSED (original data unchanged)\n")
 
+# --- Test: extract_temp_profile() helper ---
+cat("\n=== Test: extract_temp_profile() helper ===\n")
+temp_csv_data <- read_csv("input_data/hourly_temperature_28days.csv", show_col_types = FALSE)
+profile <- extract_temp_profile(temp_csv_data)
+cat("  Profile rows:", nrow(profile), "\n")
+cat("  Profile columns:", paste(names(profile), collapse=", "), "\n")
+cat("  time_days[1]:", profile$time_days[1], "\n")
+cat("  time_days range: [", min(profile$time_days), ",", max(profile$time_days), "]\n")
+stopifnot(!is.null(profile))
+stopifnot(nrow(profile) > 2)
+stopifnot("time_days" %in% names(profile))
+stopifnot("temperature" %in% names(profile))
+stopifnot(profile$time_days[1] == 0)
+cat("  extract_temp_profile: PASSED\n")
+
+# --- Test 5: Dynamic temperature profile (consumer stage) ---
+cat("\n=== Test 5: Dynamic temperature profile (consumer stage) ===\n")
+cat("  Using hourly_temperature_28days.csv as consumer temp profile\n")
+
+stage_stats_dynamic <- list(
+  processing_facility = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+  transportation_facility_to_retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+  retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+  transportation_retail_to_home = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+  consumer = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = profile)
+)
+
+# Store original N0 values for immutability check
+orig_bclc_n0_dyn <- ModelData_BCLc_input$log10N0
+orig_d_n0_dyn <- ModelData_D_input$log10N0
+
+result5 <- run_spoilage_model(
+  ModelData_BCLc_input = ModelData_BCLc_input,
+  ModelData_D_input = ModelData_D_input,
+  stage_stats = stage_stats_dynamic,
+  selected_stages = c("consumer"),
+  progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
+)
+cat("  Output dimensions:", nrow(result5), "x", ncol(result5), "\n")
+cat("  Days:", paste(result5$Day, collapse=", "), "\n")
+print(result5)
+
+# Verify expected dimensions: 5 rows (days 7,14,21,28,35) x expected columns
+stopifnot(nrow(result5) == 5)
+stopifnot("Day" %in% names(result5))
+stopifnot(all(result5$Day == c(7, 14, 21, 28, 35)))
+cat("  Dimension check (5 rows, days 7/14/21/28/35): PASSED\n")
+
+# Verify original data was NOT modified (immutability check)
+stopifnot(all.equal(orig_bclc_n0_dyn, ModelData_BCLc_input$log10N0))
+stopifnot(all.equal(orig_d_n0_dyn, ModelData_D_input$log10N0))
+cat("  Immutability check: PASSED (original data unchanged)\n")
+
+cat("  Dynamic temperature profile test: PASSED\n")
+
 cat("\n=== All tests completed ===\n")
