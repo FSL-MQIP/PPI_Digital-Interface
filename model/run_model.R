@@ -192,10 +192,32 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
       } else if (time_col %in% names(updated_data_d) && !is.na(time_mean)) {
         updated_data_d[[time_col]] <- rep(time_mean, nrow(updated_data_d))
       }
+
+      # If hourly profile exists, override duration with profile span
+      if (!is.null(stage_stats) && !is.null(stage_stats[[stage]]) &&
+          !is.null(stage_stats[[stage]]$temp_profile)) {
+        profile_duration <- max(stage_stats[[stage]]$temp_profile$time_days)
+        if (time_col %in% names(updated_data_bclc)) {
+          updated_data_bclc[[time_col]] <- rep(profile_duration, nrow(updated_data_bclc))
+        }
+        if (time_col %in% names(updated_data_d)) {
+          updated_data_d[[time_col]] <- rep(profile_duration, nrow(updated_data_d))
+        }
+      }
     }
     # If has_user_data is FALSE, columns keep their original values from input data
   }
-  
+
+  # Collect hourly temperature profiles for D pathway
+  temp_profiles <- list()
+  for (stage in all_stages) {
+    if (!is.null(selected_stages) && stage %in% selected_stages &&
+        !is.null(stage_stats) && !is.null(stage_stats[[stage]]) &&
+        !is.null(stage_stats[[stage]]$temp_profile)) {
+      temp_profiles[[stage]] <- stage_stats[[stage]]$temp_profile
+    }
+  }
+
   # Calculate n_sim from the data (number of unique lots)
   n_sim <- length(unique(updated_data_bclc$lot_id))
   
@@ -273,29 +295,42 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   # Process ModelData_D (use updated data with sampled values)
   ModelData_D <- updated_data_d
   
-  # Prepare temperature profile matrices for dynamic growth model
-  env_cond_time <- matrix(c(rep(0, length(ModelData_D$t_F)),
-                            ModelData_D$t_F, 
-                            ModelData_D$t_F + 0.00001,
-                            ModelData_D$t_F + ModelData_D$t_T,
-                            ModelData_D$t_F + ModelData_D$t_T + 0.00001,
-                            ModelData_D$t_F + ModelData_D$t_T + ModelData_D$t_S,
-                            ModelData_D$t_F + ModelData_D$t_T + ModelData_D$t_S + 0.00001,
-                            ModelData_D$t_F + ModelData_D$t_T + ModelData_D$t_S + ModelData_D$t_T2,
-                            ModelData_D$t_F + ModelData_D$t_T + ModelData_D$t_S + ModelData_D$t_T2 + 0.00001,
-                            ModelData_D$t_F + ModelData_D$t_T + ModelData_D$t_S + ModelData_D$t_T2 + ModelData_D$t_H), ncol = 10)
-  
-  env_cond_temp <- matrix(c(ModelData_D$T_F, 
-                            ModelData_D$T_F,
-                            ModelData_D$T_T,
-                            ModelData_D$T_T,
-                            ModelData_D$T_S,
-                            ModelData_D$T_S,
-                            ModelData_D$T_T2,
-                            ModelData_D$T_T2,
-                            ModelData_D$T_H,
-                            ModelData_D$T_H), ncol = 10)
-  
+  # Build env_conditions tibble for a single container
+  # Handles both static (2-point step function) and dynamic (hourly profile) stages
+  build_env_conditions <- function(i, ModelData_D, temp_profiles, stage_order, stage_to_cols) {
+    time_vec <- numeric(0)
+    temp_vec <- numeric(0)
+    cumulative_time <- 0
+    epsilon <- 1e-5
+
+    for (idx in seq_along(stage_order)) {
+      stage <- stage_order[idx]
+      cols <- stage_to_cols[[stage]]
+
+      if (!is.null(temp_profiles[[stage]])) {
+        # Dynamic: splice in hourly profile, shifted to absolute time
+        profile <- temp_profiles[[stage]]
+        start_time <- if (idx > 1) cumulative_time + epsilon else cumulative_time
+        shifted_times <- profile$time_days + start_time
+        time_vec <- c(time_vec, shifted_times)
+        temp_vec <- c(temp_vec, profile$temperature)
+        stage_duration <- max(profile$time_days)
+      } else {
+        # Static: 2-point step function (current behavior)
+        stage_temp <- ModelData_D[[cols$temp]][i]
+        stage_dur <- ModelData_D[[cols$time]][i]
+        start_time <- if (idx > 1) cumulative_time + epsilon else cumulative_time
+        time_vec <- c(time_vec, start_time, start_time + stage_dur)
+        temp_vec <- c(temp_vec, stage_temp, stage_temp)
+        stage_duration <- stage_dur
+      }
+
+      cumulative_time <- cumulative_time + stage_duration
+    }
+
+    tibble(time = time_vec, temperature = temp_vec)
+  }
+
   # Set up simulation parameters
   my_times <- seq(0, t_H)
   num_iterations <- nrow(ModelData_D)
@@ -323,10 +358,7 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     # Run dynamic growth simulation
     growth <- predict_dynamic_growth(
       times = my_times,
-      env_conditions = tibble(
-        time = env_cond_time[i, ],
-        temperature = env_cond_temp[i, ]
-      ),
+      env_conditions = build_env_conditions(i, ModelData_D, temp_profiles, all_stages, stage_to_cols),
       my_primary,
       my_secondary
     )
