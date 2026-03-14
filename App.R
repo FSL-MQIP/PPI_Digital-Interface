@@ -778,8 +778,10 @@ server <- function(input, output, session) {
             }
           }
 
-          # Run the model (sampling logic is now inside the function)
-          # t_H (total shelf-life horizon) defaults to 35 inside run_spoilage_model
+          # Fixed seed ensures reproducible results and consistent
+          # baseline vs scenario comparisons (same random draws)
+          set.seed(42)
+
           result <- run_spoilage_model(
             ModelData_BCLc_input = ModelData_BCLc_input,
             ModelData_D_input = ModelData_D_input,

@@ -36,6 +36,7 @@ ModelData_BCLc_input <- read_csv("input_data/ModelData_BCLc_input.csv", show_col
 ModelData_D_input <- read_csv("input_data/ModelData_D_input.csv", show_col_types = FALSE)
 
 cat("Running baseline model...\n")
+set.seed(42)
 baseline_result <- run_spoilage_model(
   ModelData_BCLc_input = ModelData_BCLc_input,
   ModelData_D_input = ModelData_D_input,
