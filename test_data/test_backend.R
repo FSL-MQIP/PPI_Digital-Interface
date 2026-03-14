@@ -21,6 +21,16 @@ suppressPackageStartupMessages({
 
 plan(sequential)  # Keep it simple for testing
 
+# Load baseline temperature profiles
+default_profiles <- list()
+for (stage in names(default_profile_paths)) {
+  path <- default_profile_paths[[stage]]
+  if (!is.null(path) && file.exists(path)) {
+    data <- read.csv(path, stringsAsFactors = FALSE)
+    default_profiles[[stage]] <- extract_temp_profile(data)
+  }
+}
+
 cat("=== Loading input data (subsampled for speed) ===\n")
 ModelData_BCLc_input <- read_csv("input_data/ModelData_BCLc_input.csv", show_col_types = FALSE)
 ModelData_D_input <- read_csv("input_data/ModelData_D_input.csv", show_col_types = FALSE)
@@ -41,6 +51,7 @@ result1 <- run_spoilage_model(
   ModelData_D_input = ModelData_D_input,
   stage_stats = NULL,
   selected_stages = NULL,
+  default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result1), "x", ncol(result1), "\n")
@@ -87,6 +98,7 @@ result2 <- run_spoilage_model(
   ModelData_D_input = ModelData_D_input,
   stage_stats = stage_stats,
   selected_stages = c("processing_facility", "retail"),
+  default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result2), "x", ncol(result2), "\n")
@@ -114,6 +126,7 @@ result3 <- run_spoilage_model(
   ModelData_D_input = ModelData_D_input,
   stage_stats = stage_stats3,
   selected_stages = c("processing_facility", "retail", "consumer"),
+  default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result3), "x", ncol(result3), "\n")
@@ -144,6 +157,7 @@ result4 <- run_spoilage_model(
   selected_stages = NULL,
   apc_mean = 4.0,
   apc_sd = 0.5,
+  default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result4), "x", ncol(result4), "\n")
@@ -157,7 +171,7 @@ cat("  Immutability check: PASSED (original data unchanged)\n")
 
 # --- Test: extract_temp_profile() helper ---
 cat("\n=== Test: extract_temp_profile() helper ===\n")
-temp_csv_data <- read_csv("input_data/hourly_temperature_28days.csv", show_col_types = FALSE)
+temp_csv_data <- read_csv("input_data/baseline_consumer.csv", show_col_types = FALSE)
 profile <- extract_temp_profile(temp_csv_data)
 cat("  Profile rows:", nrow(profile), "\n")
 cat("  Profile columns:", paste(names(profile), collapse=", "), "\n")
@@ -172,7 +186,7 @@ cat("  extract_temp_profile: PASSED\n")
 
 # --- Test 5: Dynamic temperature profile (consumer stage) ---
 cat("\n=== Test 5: Dynamic temperature profile (consumer stage) ===\n")
-cat("  Using hourly_temperature_28days.csv as consumer temp profile\n")
+cat("  Using baseline_consumer.csv as consumer temp profile\n")
 
 stage_stats_dynamic <- list(
   processing_facility = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
@@ -191,6 +205,7 @@ result5 <- run_spoilage_model(
   ModelData_D_input = ModelData_D_input,
   stage_stats = stage_stats_dynamic,
   selected_stages = c("consumer"),
+  default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result5), "x", ncol(result5), "\n")
