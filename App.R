@@ -511,8 +511,8 @@ server <- function(input, output, session) {
       `Supply Chain Stage` = "Bulk tank",
       `Data Type` = "Microbial Concentration",
       Source = apc_source(),
-      Mean = as.character(apc_mean()),
-      SD = as.character(apc_sd()),
+      Mean = as.character(round(apc_mean(), 2)),
+      SD = as.character(round(apc_sd(), 2)),
       Unit = "log10 CFU/mL",
       stringsAsFactors = FALSE,
       check.names = FALSE

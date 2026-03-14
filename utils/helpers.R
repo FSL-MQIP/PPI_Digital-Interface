@@ -215,8 +215,8 @@ process_csv_file <- function(file) {
 # @param unit Character string for the unit
 # @return Data frame row for summary table
 create_summary_row <- function(stage_label, data_type, source, mean, sd, unit) {
-  mean_val <- ifelse(is.numeric(mean) && !is.na(mean), mean, "N/A")
-  sd_val <- ifelse(is.numeric(sd) && !is.na(sd), sd, "N/A")
+  mean_val <- ifelse(is.numeric(mean) && !is.na(mean), round(mean, 2), "N/A")
+  sd_val <- ifelse(is.numeric(sd) && !is.na(sd), round(sd, 2), "N/A")
 
   data.frame(
     `Supply Chain Stage` = stage_label,
