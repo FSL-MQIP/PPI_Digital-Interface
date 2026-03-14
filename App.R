@@ -140,11 +140,11 @@ server <- function(input, output, session) {
 
   # Reactive values to store temperature and time statistics for each stage
   stage_stats <- reactiveValues(
-    processing_facility = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL),
-    transportation_facility_to_retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL),
-    retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL),
-    transportation_retail_to_home = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL),
-    consumer = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL)
+    processing_facility = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+    transportation_facility_to_retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+    retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+    transportation_retail_to_home = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
+    consumer = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL)
   )
   
   # Reactive value to track if model is running
@@ -354,6 +354,7 @@ server <- function(input, output, session) {
       stage_stats$processing_facility$temp_sd <- file_stats$temperature$sd
       stage_stats$processing_facility$time_mean <- file_stats$time$mean
       stage_stats$processing_facility$time_sd <- file_stats$time$sd
+      stage_stats$processing_facility$temp_profile <- file_stats$temp_profile
     }
   })
   
@@ -364,6 +365,7 @@ server <- function(input, output, session) {
       stage_stats$transportation_facility_to_retail$temp_sd <- file_stats$temperature$sd
       stage_stats$transportation_facility_to_retail$time_mean <- file_stats$time$mean
       stage_stats$transportation_facility_to_retail$time_sd <- file_stats$time$sd
+      stage_stats$transportation_facility_to_retail$temp_profile <- file_stats$temp_profile
     }
   })
   
@@ -374,6 +376,7 @@ server <- function(input, output, session) {
       stage_stats$retail$temp_sd <- file_stats$temperature$sd
       stage_stats$retail$time_mean <- file_stats$time$mean
       stage_stats$retail$time_sd <- file_stats$time$sd
+      stage_stats$retail$temp_profile <- file_stats$temp_profile
     }
   })
   
@@ -384,6 +387,7 @@ server <- function(input, output, session) {
       stage_stats$transportation_retail_to_home$temp_sd <- file_stats$temperature$sd
       stage_stats$transportation_retail_to_home$time_mean <- file_stats$time$mean
       stage_stats$transportation_retail_to_home$time_sd <- file_stats$time$sd
+      stage_stats$transportation_retail_to_home$temp_profile <- file_stats$temp_profile
     }
   })
   
@@ -394,6 +398,7 @@ server <- function(input, output, session) {
       stage_stats$consumer$temp_sd <- file_stats$temperature$sd
       stage_stats$consumer$time_mean <- file_stats$time$mean
       stage_stats$consumer$time_sd <- file_stats$time$sd
+      stage_stats$consumer$temp_profile <- file_stats$temp_profile
     }
   })
   
