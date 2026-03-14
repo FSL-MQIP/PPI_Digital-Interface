@@ -225,4 +225,86 @@ cat("  Immutability check: PASSED (original data unchanged)\n")
 
 cat("  Dynamic temperature profile test: PASSED\n")
 
+# --- Load scenario profiles (mirrors App.R logic) ---
+scenario_profiles <- list()
+for (scenario_id in names(scenario_profile_paths)) {
+  info <- scenario_profile_paths[[scenario_id]]
+  if (!is.null(info$path) && file.exists(info$path)) {
+    data <- read.csv(info$path, stringsAsFactors = FALSE)
+    scenario_profiles[[scenario_id]] <- list(
+      profile = extract_temp_profile(data),
+      stage   = info$stage,
+      label   = info$label
+    )
+  }
+}
+cat("\n  Loaded", length(scenario_profiles), "scenario profiles:",
+    paste(names(scenario_profiles), collapse = ", "), "\n")
+
+# --- Test 6: Disruption scenario – S1 (facility storage cooling disruption) ---
+cat("\n=== Test 6: Disruption scenario S1 (facility storage cooling) ===\n")
+
+effective_profiles_s1 <- default_profiles
+effective_profiles_s1[["processing_facility"]] <- scenario_profiles[["s1"]]$profile
+
+# Store original default_profiles reference for immutability check
+orig_pf_profile <- default_profiles[["processing_facility"]]
+
+result6 <- run_spoilage_model(
+  ModelData_BCLc_input = ModelData_BCLc_input,
+  ModelData_D_input    = ModelData_D_input,
+  stage_stats          = NULL,
+  selected_stages      = NULL,
+  default_profiles     = effective_profiles_s1,
+  progress_callback    = function(message, value) cat("  [", round(value * 100), "%]", message, "\n")
+)
+cat("  Output dimensions:", nrow(result6), "x", ncol(result6), "\n")
+cat("  Days:", paste(result6$Day, collapse = ", "), "\n")
+print(result6)
+
+stopifnot(nrow(result6) == 5)
+stopifnot(ncol(result6) == 11)
+stopifnot(all(result6$Day == c(7, 14, 21, 28, 35)))
+cat("  Dimension check (5 rows x 11 cols, days 7/14/21/28/35): PASSED\n")
+
+# Immutability: original default_profiles must not have been altered
+stopifnot(identical(default_profiles[["processing_facility"]], orig_pf_profile))
+cat("  Immutability check: PASSED (original default_profiles unchanged)\n")
+
+cat("  S1 disruption scenario test: PASSED\n")
+
+# --- Test 7: Combined disruption scenarios – S1 + S3 ---
+cat("\n=== Test 7: Combined disruption S1 + S3 (facility storage + delivery) ===\n")
+
+effective_profiles_s1s3 <- default_profiles
+effective_profiles_s1s3[["processing_facility"]]            <- scenario_profiles[["s1"]]$profile
+effective_profiles_s1s3[["transportation_facility_to_retail"]] <- scenario_profiles[["s3"]]$profile
+
+orig_pf_profile2      <- default_profiles[["processing_facility"]]
+orig_transport_profile <- default_profiles[["transportation_facility_to_retail"]]
+
+result7 <- run_spoilage_model(
+  ModelData_BCLc_input = ModelData_BCLc_input,
+  ModelData_D_input    = ModelData_D_input,
+  stage_stats          = NULL,
+  selected_stages      = NULL,
+  default_profiles     = effective_profiles_s1s3,
+  progress_callback    = function(message, value) cat("  [", round(value * 100), "%]", message, "\n")
+)
+cat("  Output dimensions:", nrow(result7), "x", ncol(result7), "\n")
+cat("  Days:", paste(result7$Day, collapse = ", "), "\n")
+print(result7)
+
+stopifnot(nrow(result7) == 5)
+stopifnot(ncol(result7) == 11)
+stopifnot(all(result7$Day == c(7, 14, 21, 28, 35)))
+cat("  Dimension check (5 rows x 11 cols, days 7/14/21/28/35): PASSED\n")
+
+# Immutability: original default_profiles must not have been altered
+stopifnot(identical(default_profiles[["processing_facility"]], orig_pf_profile2))
+stopifnot(identical(default_profiles[["transportation_facility_to_retail"]], orig_transport_profile))
+cat("  Immutability check: PASSED (original default_profiles unchanged)\n")
+
+cat("  S1 + S3 combined disruption scenario test: PASSED\n")
+
 cat("\n=== All tests completed ===\n")
