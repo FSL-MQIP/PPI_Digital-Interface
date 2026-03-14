@@ -118,3 +118,11 @@ No model changes needed — scenarios overlay the `default_profiles` parameter a
 
 Files modified: `config/default_parameters.R`, `App.R`, `test_data/test_backend.R`
 Files renamed: 4 scenario CSV files in `input_data/`
+
+## 2026-03-14: Scenario Override Precedence and Q2/Q3 Merge
+
+Fixed scenario override precedence: when a user uploads temperature data AND selects a disruption scenario for the same supply chain stage, the scenario now takes precedence (previously user data won silently). A warning notification is shown when this happens.
+
+Merged the Q3 disruption scenario step into Q2 — scenario dropdowns now appear directly in the temperature data question, eliminating the extra Continue/Back step. The model now receives `scenario_overrides` as a separate parameter applied after user data, ensuring correct precedence: defaults → user data → scenario overrides.
+
+Files modified: `model/run_model.R`, `App.R`, `test_data/test_backend.R`
