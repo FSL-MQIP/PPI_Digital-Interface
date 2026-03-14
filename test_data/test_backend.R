@@ -54,10 +54,16 @@ result1 <- run_spoilage_model(
   default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result1), "x", ncol(result1), "\n")
-cat("  Days:", paste(result1$Day, collapse=", "), "\n")
-cat("  Columns:", paste(names(result1), collapse=", "), "\n")
-print(result1)
+cat("  Output dimensions:", nrow(result1$SpoilStats_all), "x", ncol(result1$SpoilStats_all), "\n")
+cat("  Days:", paste(result1$SpoilStats_all$Day, collapse=", "), "\n")
+cat("  Columns:", paste(names(result1$SpoilStats_all), collapse=", "), "\n")
+print(result1$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result1$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result1$days_to_25pct_consumer, "\n")
+stopifnot(is.numeric(result1$pct_spoiled_at_retail))
+stopifnot(result1$pct_spoiled_at_retail >= 0 && result1$pct_spoiled_at_retail <= 100)
+stopifnot(is.numeric(result1$days_to_25pct_consumer) || is.na(result1$days_to_25pct_consumer))
+cat("  New metrics check: PASSED\n")
 
 # --- Test 2: User data for processing facility + retail ---
 cat("\n=== Test 2: User data for 2 stages ===\n")
@@ -101,9 +107,11 @@ result2 <- run_spoilage_model(
   default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result2), "x", ncol(result2), "\n")
-cat("  Days:", paste(result2$Day, collapse=", "), "\n")
-print(result2)
+cat("  Output dimensions:", nrow(result2$SpoilStats_all), "x", ncol(result2$SpoilStats_all), "\n")
+cat("  Days:", paste(result2$SpoilStats_all$Day, collapse=", "), "\n")
+print(result2$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result2$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result2$days_to_25pct_consumer, "\n")
 
 # --- Test 3: User data for all 3 stages including consumer ---
 cat("\n=== Test 3: User data for 3 stages (incl. consumer) ===\n")
@@ -129,9 +137,11 @@ result3 <- run_spoilage_model(
   default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result3), "x", ncol(result3), "\n")
-cat("  Days:", paste(result3$Day, collapse=", "), "\n")
-print(result3)
+cat("  Output dimensions:", nrow(result3$SpoilStats_all), "x", ncol(result3$SpoilStats_all), "\n")
+cat("  Days:", paste(result3$SpoilStats_all$Day, collapse=", "), "\n")
+print(result3$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result3$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result3$days_to_25pct_consumer, "\n")
 
 # --- Test: APC CSV processing ---
 cat("\n=== Test: APC CSV processing ===\n")
@@ -160,9 +170,11 @@ result4 <- run_spoilage_model(
   default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result4), "x", ncol(result4), "\n")
-cat("  Days:", paste(result4$Day, collapse=", "), "\n")
-print(result4)
+cat("  Output dimensions:", nrow(result4$SpoilStats_all), "x", ncol(result4$SpoilStats_all), "\n")
+cat("  Days:", paste(result4$SpoilStats_all$Day, collapse=", "), "\n")
+print(result4$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result4$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result4$days_to_25pct_consumer, "\n")
 
 # Verify original data was NOT modified (immutability check)
 stopifnot(all.equal(orig_bclc_n0, ModelData_BCLc_input$log10N0))
@@ -208,14 +220,16 @@ result5 <- run_spoilage_model(
   default_profiles = default_profiles,
   progress_callback = function(message, value) cat("  [", round(value*100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result5), "x", ncol(result5), "\n")
-cat("  Days:", paste(result5$Day, collapse=", "), "\n")
-print(result5)
+cat("  Output dimensions:", nrow(result5$SpoilStats_all), "x", ncol(result5$SpoilStats_all), "\n")
+cat("  Days:", paste(result5$SpoilStats_all$Day, collapse=", "), "\n")
+print(result5$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result5$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result5$days_to_25pct_consumer, "\n")
 
 # Verify expected dimensions: 5 rows (days 7,14,21,28,35) x expected columns
-stopifnot(nrow(result5) == 5)
-stopifnot("Day" %in% names(result5))
-stopifnot(all(result5$Day == c(7, 14, 21, 28, 35)))
+stopifnot(nrow(result5$SpoilStats_all) == 5)
+stopifnot("Day" %in% names(result5$SpoilStats_all))
+stopifnot(all(result5$SpoilStats_all$Day == c(7, 14, 21, 28, 35)))
 cat("  Dimension check (5 rows, days 7/14/21/28/35): PASSED\n")
 
 # Verify original data was NOT modified (immutability check)
@@ -258,13 +272,15 @@ result6 <- run_spoilage_model(
   scenario_overrides   = scenario_overrides_s1,
   progress_callback    = function(message, value) cat("  [", round(value * 100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result6), "x", ncol(result6), "\n")
-cat("  Days:", paste(result6$Day, collapse = ", "), "\n")
-print(result6)
+cat("  Output dimensions:", nrow(result6$SpoilStats_all), "x", ncol(result6$SpoilStats_all), "\n")
+cat("  Days:", paste(result6$SpoilStats_all$Day, collapse = ", "), "\n")
+print(result6$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result6$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result6$days_to_25pct_consumer, "\n")
 
-stopifnot(nrow(result6) == 5)
-stopifnot(ncol(result6) == 11)
-stopifnot(all(result6$Day == c(7, 14, 21, 28, 35)))
+stopifnot(nrow(result6$SpoilStats_all) == 5)
+stopifnot(ncol(result6$SpoilStats_all) == 11)
+stopifnot(all(result6$SpoilStats_all$Day == c(7, 14, 21, 28, 35)))
 cat("  Dimension check (5 rows x 11 cols, days 7/14/21/28/35): PASSED\n")
 
 # Immutability: original default_profiles must not have been altered
@@ -293,13 +309,15 @@ result7 <- run_spoilage_model(
   scenario_overrides   = scenario_overrides_combined,
   progress_callback    = function(message, value) cat("  [", round(value * 100), "%]", message, "\n")
 )
-cat("  Output dimensions:", nrow(result7), "x", ncol(result7), "\n")
-cat("  Days:", paste(result7$Day, collapse = ", "), "\n")
-print(result7)
+cat("  Output dimensions:", nrow(result7$SpoilStats_all), "x", ncol(result7$SpoilStats_all), "\n")
+cat("  Days:", paste(result7$SpoilStats_all$Day, collapse = ", "), "\n")
+print(result7$SpoilStats_all)
+cat("  Pre-consumer spoilage:", result7$pct_spoiled_at_retail, "%\n")
+cat("  Consumer days to 25% spoilage:", result7$days_to_25pct_consumer, "\n")
 
-stopifnot(nrow(result7) == 5)
-stopifnot(ncol(result7) == 11)
-stopifnot(all(result7$Day == c(7, 14, 21, 28, 35)))
+stopifnot(nrow(result7$SpoilStats_all) == 5)
+stopifnot(ncol(result7$SpoilStats_all) == 11)
+stopifnot(all(result7$SpoilStats_all$Day == c(7, 14, 21, 28, 35)))
 cat("  Dimension check (5 rows x 11 cols, days 7/14/21/28/35): PASSED\n")
 
 # Immutability: original default_profiles must not have been altered

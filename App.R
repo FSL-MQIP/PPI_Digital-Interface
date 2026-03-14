@@ -329,6 +329,7 @@ server <- function(input, output, session) {
         collapsible = TRUE,
         tableOutput("summary_table")
       ),
+      uiOutput("metric_value_boxes"),
       box(
         width = 12,
         title = "Predicted Spoilage Over Time",
@@ -806,7 +807,7 @@ server <- function(input, output, session) {
       return(NULL)
     }
 
-    result <- spoil_stats_result()
+    result <- spoil_stats_result()$SpoilStats_all
     plot_data <- data.frame(
       Day = as.numeric(result$Day),
       Median = result$Median_Proportion * 100,
@@ -870,8 +871,8 @@ server <- function(input, output, session) {
     }
     
     # Format the table nicely
-    result <- spoil_stats_result()
-    
+    result <- spoil_stats_result()$SpoilStats_all
+
     # Convert proportions to percentages for better readability
     result_formatted <- data.frame(
       Day = result$Day,
@@ -891,6 +892,45 @@ server <- function(input, output, session) {
     
     result_formatted
   }, digits = 2)
+
+  # Render metric value boxes
+  output$metric_value_boxes <- renderUI({
+    if (is.null(spoil_stats_result())) {
+      return(NULL)
+    }
+
+    result <- spoil_stats_result()
+
+    # Pre-consumer spoilage rate
+    pct_retail <- result$pct_spoiled_at_retail
+    retail_color <- if (pct_retail > 10) "red" else if (pct_retail > 5) "yellow" else "green"
+
+    # Consumer days to 25% spoilage
+    days_25 <- result$days_to_25pct_consumer
+    if (is.na(days_25)) {
+      days_text <- paste0("> ", 35, " days")
+    } else {
+      days_text <- paste0(days_25, " days")
+    }
+    days_color <- if (is.na(days_25) || days_25 > 14) "green" else if (days_25 > 7) "yellow" else "red"
+
+    fluidRow(
+      valueBox(
+        value = paste0(pct_retail, "%"),
+        subtitle = "Containers spoiled before consumer purchase",
+        icon = icon("store"),
+        color = retail_color,
+        width = 6
+      ),
+      valueBox(
+        value = days_text,
+        subtitle = "Consumer days until 25% spoiled",
+        icon = icon("clock"),
+        color = days_color,
+        width = 6
+      )
+    )
+  })
 }
 
 # Run the app

@@ -559,10 +559,85 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   CombinedData_wide$log10sumN <- log10(CombinedData_wide$Total_N)
   
   # Determine spoilage status: spoiled if total concentration > 6 log10 CFU/mL
-  CombinedData_wide <- CombinedData_wide %>% 
-    rowwise() %>% 
-    mutate(spoil = log10sumN > log10(1000000))
-  
+  CombinedData_wide <- CombinedData_wide %>%
+    rowwise() %>%
+    mutate(spoil = log10sumN > log10(1000000)) %>%
+    ungroup()
+
+  # --- Metric 1: Pre-consumer spoilage rate (% spoiled at end of retail) ---
+  max_day <- max(CombinedData_wide$Day)
+
+  # Get unique containers with stage durations
+  container_info <- CombinedData_wide %>%
+    distinct(lot_id, unit_id, t_F, t_T, t_S, t_T2) %>%
+    mutate(
+      end_retail_day = t_F + t_T + t_S,
+      consumer_start_day = t_F + t_T + t_S + t_T2,
+      end_retail_clamped = pmin(pmax(end_retail_day, 0), max_day),
+      day_lo = as.integer(floor(end_retail_clamped)),
+      day_hi = as.integer(ceiling(end_retail_clamped)),
+      frac = end_retail_clamped - day_lo
+    )
+
+  # Look up log10sumN at bracketing days via joins
+  log10sumN_lookup <- CombinedData_wide %>%
+    dplyr::select(lot_id, unit_id, Day, log10sumN)
+
+  container_info <- container_info %>%
+    left_join(log10sumN_lookup, by = c("lot_id", "unit_id", "day_lo" = "Day")) %>%
+    rename(log10sumN_lo = log10sumN) %>%
+    left_join(log10sumN_lookup, by = c("lot_id", "unit_id", "day_hi" = "Day")) %>%
+    rename(log10sumN_hi = log10sumN) %>%
+    mutate(
+      log10sumN_at_retail = ifelse(
+        day_lo == day_hi,
+        log10sumN_lo,
+        log10sumN_lo + (log10sumN_hi - log10sumN_lo) * frac
+      ),
+      spoiled_at_retail = log10sumN_at_retail > 6
+    )
+
+  pct_spoiled_at_retail <- round(
+    100 * sum(container_info$spoiled_at_retail, na.rm = TRUE) / nrow(container_info), 2
+  )
+
+  # --- Metric 2: Consumer days to 25% spoilage ---
+  # Find first crossing of 6 log per container (vectorized)
+  crossing_data <- CombinedData_wide %>%
+    arrange(lot_id, unit_id, Day) %>%
+    group_by(lot_id, unit_id) %>%
+    mutate(prev_log10sumN = lag(log10sumN)) %>%
+    filter(log10sumN > 6 & (is.na(prev_log10sumN) | prev_log10sumN <= 6)) %>%
+    slice(1) %>%
+    mutate(
+      crossing_day = ifelse(
+        is.na(prev_log10sumN) | prev_log10sumN == log10sumN,
+        Day,
+        (Day - 1) + (6 - prev_log10sumN) / (log10sumN - prev_log10sumN)
+      )
+    ) %>%
+    dplyr::select(lot_id, unit_id, crossing_day) %>%
+    ungroup()
+
+  # Join crossing days back to container info
+  container_info <- container_info %>%
+    left_join(crossing_data, by = c("lot_id", "unit_id")) %>%
+    mutate(
+      crossing_day = ifelse(is.na(crossing_day), Inf, crossing_day),
+      days_to_spoil = pmax(crossing_day - consumer_start_day, 0)
+    )
+
+  # Find days from consumer start until 25% of containers are spoiled
+  n_containers <- nrow(container_info)
+  target_count <- ceiling(0.25 * n_containers)
+  spoil_times <- sort(container_info$days_to_spoil)
+
+  if (spoil_times[target_count] < Inf) {
+    days_to_25pct_consumer <- round(spoil_times[target_count], 1)
+  } else {
+    days_to_25pct_consumer <- NA_real_
+  }
+
   # Extract results for specific days
   results_d7 <- subset(CombinedData_wide, Day == 7)
   results_d14 <- subset(CombinedData_wide, Day == 14)
@@ -654,6 +729,10 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     progress_callback(message = "Model complete!", value = 1.0)
   }
   
-  return(SpoilStats_all)
+  return(list(
+    SpoilStats_all = SpoilStats_all,
+    pct_spoiled_at_retail = pct_spoiled_at_retail,
+    days_to_25pct_consumer = days_to_25pct_consumer
+  ))
 }
 
