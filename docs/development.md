@@ -82,3 +82,19 @@ Key changes:
 - No UI changes — existing CSV upload flow automatically detects and uses hourly profiles
 
 Files modified: `utils/helpers.R`, `App.R`, `model/run_model.R`
+
+## 2026-03-14: Baseline Temperature Profiles Replace Static Defaults
+
+Replaced the static mean/SD temperature defaults with actual baseline temperature CSV data for 4 out of 5 supply chain stages. The baseline CSVs were also renamed for clarity:
+
+- `adjP1-A-BL FS.csv` → `baseline_facility_storage.csv` (processing facility, ~2.4 days, mean 1.7°C)
+- `adjP1-A-BL DL.csv` → `baseline_transport_to_retail.csv` (transport to retail, ~8 hours, mean 4.5°C)
+- `hourly_temperature_5days.csv` → `baseline_retail.csv` (retail, ~5.5 days, 6.5°C constant)
+- `hourly_temperature_28days.csv` → `baseline_consumer.csv` (consumer, ~28 days, 6.5°C constant)
+
+Transportation from retail to home retains its original static default (no baseline CSV available).
+
+The D pathway ODE solver now uses these baseline profiles by default via `build_env_conditions()`. BCLc uses the profile mean temperature. User-uploaded data overrides the baselines for any stage. Default parameter values in `default_parameters.R` were updated to match the baseline CSV statistics.
+
+Files modified: `config/default_parameters.R`, `App.R`, `model/run_model.R`, `test_data/test_backend.R`
+Files renamed: 4 baseline CSV files in `input_data/`
