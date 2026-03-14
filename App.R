@@ -592,8 +592,7 @@ server <- function(input, output, session) {
           time_sd <- time_params$sd
         }
 
-        # Check if a scenario overrides this stage (temperature only)
-        time_source <- source
+        # Check if a scenario overrides this stage
         scenario_key <- NULL
         if (stage == "processing_facility" && !is.null(input$scenario_fs) && input$scenario_fs != "none") {
           scenario_key <- input$scenario_fs
@@ -605,6 +604,8 @@ server <- function(input, output, session) {
           source <- paste0("Scenario (", scenario_profiles[[scenario_key]]$label, ")")
           temp_mean <- round(mean(sp$temperature), 4)
           temp_sd <- round(sd(sp$temperature), 4)
+          time_mean <- round(max(sp$time_days), 4)
+          time_sd <- 0
         }
 
         # Add Temperature row
@@ -614,7 +615,7 @@ server <- function(input, output, session) {
 
         # Add Time row
         summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Time", time_source, time_mean, time_sd, "day"
+          stage_label, "Time", source, time_mean, time_sd, "day"
         )
       }
     } else if (!is.null(input$has_temperature_data) && input$has_temperature_data == "no") {
@@ -640,6 +641,8 @@ server <- function(input, output, session) {
           source <- paste0("Scenario (", scenario_profiles[[scenario_key]]$label, ")")
           temp_params$mean <- round(mean(sp$temperature), 4)
           temp_params$sd <- round(sd(sp$temperature), 4)
+          time_params$mean <- round(max(sp$time_days), 4)
+          time_params$sd <- 0
         }
 
         # Add Temperature row
@@ -649,7 +652,7 @@ server <- function(input, output, session) {
 
         # Add Time row
         summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Time", "Default", time_params$mean, time_params$sd, "day"
+          stage_label, "Time", source, time_params$mean, time_params$sd, "day"
         )
       }
     }
