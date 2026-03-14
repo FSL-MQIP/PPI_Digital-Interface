@@ -244,8 +244,7 @@ cat("\n  Loaded", length(scenario_profiles), "scenario profiles:",
 # --- Test 6: Disruption scenario – S1 (facility storage cooling disruption) ---
 cat("\n=== Test 6: Disruption scenario S1 (facility storage cooling) ===\n")
 
-effective_profiles_s1 <- default_profiles
-effective_profiles_s1[["processing_facility"]] <- scenario_profiles[["s1"]]$profile
+scenario_overrides_s1 <- list(processing_facility = scenario_profiles[["s1"]]$profile)
 
 # Store original default_profiles reference for immutability check
 orig_pf_profile <- default_profiles[["processing_facility"]]
@@ -255,7 +254,8 @@ result6 <- run_spoilage_model(
   ModelData_D_input    = ModelData_D_input,
   stage_stats          = NULL,
   selected_stages      = NULL,
-  default_profiles     = effective_profiles_s1,
+  default_profiles     = default_profiles,
+  scenario_overrides   = scenario_overrides_s1,
   progress_callback    = function(message, value) cat("  [", round(value * 100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result6), "x", ncol(result6), "\n")
@@ -276,9 +276,10 @@ cat("  S1 disruption scenario test: PASSED\n")
 # --- Test 7: Combined disruption scenarios – S1 + S3 ---
 cat("\n=== Test 7: Combined disruption S1 + S3 (facility storage + delivery) ===\n")
 
-effective_profiles_s1s3 <- default_profiles
-effective_profiles_s1s3[["processing_facility"]]            <- scenario_profiles[["s1"]]$profile
-effective_profiles_s1s3[["transportation_facility_to_retail"]] <- scenario_profiles[["s3"]]$profile
+scenario_overrides_combined <- list(
+  processing_facility            = scenario_profiles[["s1"]]$profile,
+  transportation_facility_to_retail = scenario_profiles[["s3"]]$profile
+)
 
 orig_pf_profile2      <- default_profiles[["processing_facility"]]
 orig_transport_profile <- default_profiles[["transportation_facility_to_retail"]]
@@ -288,7 +289,8 @@ result7 <- run_spoilage_model(
   ModelData_D_input    = ModelData_D_input,
   stage_stats          = NULL,
   selected_stages      = NULL,
-  default_profiles     = effective_profiles_s1s3,
+  default_profiles     = default_profiles,
+  scenario_overrides   = scenario_overrides_combined,
   progress_callback    = function(message, value) cat("  [", round(value * 100), "%]", message, "\n")
 )
 cat("  Output dimensions:", nrow(result7), "x", ncol(result7), "\n")
