@@ -56,7 +56,7 @@ simulate_growth_row <- function(row_data, t_H_total) {
   return(result_df)
 }
 
-run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_stats = NULL, selected_stages = NULL, t_H = NULL, apc_mean = NULL, apc_sd = NULL, default_profiles = NULL, progress_callback = NULL) {
+run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_stats = NULL, selected_stages = NULL, t_H = NULL, apc_mean = NULL, apc_sd = NULL, default_profiles = NULL, scenario_overrides = NULL, progress_callback = NULL) {
   
   # Set up progress reporting
   if (!is.null(progress_callback)) {
@@ -239,6 +239,33 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     # If has_user_data is FALSE, columns keep their original values from input data
   }
 
+  # Apply scenario overrides AFTER user data (scenarios take precedence)
+  if (!is.null(scenario_overrides)) {
+    for (stage in names(scenario_overrides)) {
+      profile <- scenario_overrides[[stage]]
+      if (!is.null(profile)) {
+        cols <- stage_to_cols[[stage]]
+        temp_col <- cols$temp
+        time_col <- cols$time
+        profile_mean <- mean(profile$temperature)
+        profile_duration <- max(profile$time_days)
+
+        if (temp_col %in% names(updated_data_bclc)) {
+          updated_data_bclc[[temp_col]] <- rep(profile_mean, nrow(updated_data_bclc))
+        }
+        if (time_col %in% names(updated_data_bclc)) {
+          updated_data_bclc[[time_col]] <- rep(profile_duration, nrow(updated_data_bclc))
+        }
+        if (temp_col %in% names(updated_data_d)) {
+          updated_data_d[[temp_col]] <- rep(profile_mean, nrow(updated_data_d))
+        }
+        if (time_col %in% names(updated_data_d)) {
+          updated_data_d[[time_col]] <- rep(profile_duration, nrow(updated_data_d))
+        }
+      }
+    }
+  }
+
   # Start with default baseline profiles, then override with user-uploaded ones
   temp_profiles <- list()
   if (!is.null(default_profiles)) {
@@ -254,6 +281,15 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
         !is.null(stage_stats) && !is.null(stage_stats[[stage]]) &&
         !is.null(stage_stats[[stage]]$temp_profile)) {
       temp_profiles[[stage]] <- stage_stats[[stage]]$temp_profile
+    }
+  }
+
+  # Scenario overrides take final precedence
+  if (!is.null(scenario_overrides)) {
+    for (stage in names(scenario_overrides)) {
+      if (!is.null(scenario_overrides[[stage]])) {
+        temp_profiles[[stage]] <- scenario_overrides[[stage]]
+      }
     }
   }
 
