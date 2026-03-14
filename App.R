@@ -940,38 +940,22 @@ server <- function(input, output, session) {
       }
 
       # --- Environmental Emission ---
-      # Find baseline shelf-life day (where Median_Proportion crosses 0.25)
-      interpolate_shelf_life <- function(stats) {
-        days <- as.numeric(stats$Day)
-        medians <- stats$Median_Proportion
-        for (i in 2:length(days)) {
-          if (medians[i - 1] < 0.25 && medians[i] >= 0.25) {
-            return(days[i - 1] + (0.25 - medians[i - 1]) / (medians[i] - medians[i - 1]) * (days[i] - days[i - 1]))
-          }
-        }
-        if (all(medians >= 0.25)) return(days[1])
-        return(NA_real_)
-      }
+      # Evaluate spoilage at baseline's consumer shelf-life days
+      # using per-container consumer spoil times (not absolute days)
+      ref_consumer_days <- baseline$days_to_25pct_consumer
 
-      ref_day <- interpolate_shelf_life(baseline$SpoilStats_all)
-
-      if (!is.na(ref_day)) {
-        # Interpolate total spoilage at reference day
-        interp_spoilage <- function(stats, day) {
-          approx(as.numeric(stats$Day), stats$Median_Proportion, xout = day, rule = 2)$y
-        }
-
-        compute_co2e <- function(res, day, n) {
+      if (!is.na(ref_consumer_days)) {
+        compute_co2e <- function(res, consumer_days, n) {
           retail_frac <- res$pct_spoiled_at_retail / 100
-          total_frac <- interp_spoilage(res$SpoilStats_all, day)
+          total_frac <- mean(res$consumer_spoil_times <= consumer_days)
           consumer_frac <- max(0, total_frac - retail_frac)
           retail_L <- retail_frac * n * vol_per_container
           consumer_L <- consumer_frac * n * vol_per_container
           retail_L * 0.55 + consumer_L * 0.2
         }
 
-        b_co2e <- compute_co2e(baseline, ref_day, containers)
-        s_co2e <- compute_co2e(result, ref_day, containers)
+        b_co2e <- compute_co2e(baseline, ref_consumer_days, containers)
+        s_co2e <- compute_co2e(result, ref_consumer_days, containers)
         delta_co2e <- s_co2e - b_co2e
 
         env_headline <- paste0(sprintf("%+.1f", delta_co2e), " kg CO\u2082e per lot")
@@ -979,7 +963,7 @@ server <- function(input, output, session) {
                                " | Scenario: ", round(s_co2e, 1), " kg")
       } else {
         env_headline <- "N/A"
-        env_subtitle <- "Baseline shelf-life day could not be determined"
+        env_subtitle <- "Baseline consumer shelf life could not be determined"
       }
 
       row2 <- fluidRow(

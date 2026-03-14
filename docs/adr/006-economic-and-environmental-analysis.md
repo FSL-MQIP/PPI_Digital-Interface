@@ -28,11 +28,11 @@ Both the baseline and scenario absolute economic values are displayed alongside 
 
 Environmental impact is measured in kg CO₂e per lot, based on the volume of milk wasted and the disposal pathway:
 
-1. **Reference day**: The baseline's overall shelf-life day — interpolated from `SpoilStats_all` as the day when `Median_Proportion` crosses 25%.
+1. **Reference consumer days**: The baseline's `days_to_25pct_consumer` — the number of consumer storage days until 25% of containers spoil. This is used as the evaluation point for both baseline and scenario, ensuring the comparison is based on the same amount of consumer storage time regardless of how long pre-consumer stages lasted.
 
-2. **Waste volume at reference day** (computed for both baseline and scenario):
+2. **Waste volume at reference consumer days** (computed for both baseline and scenario using per-container `consumer_spoil_times` returned by the model):
+   - Total spoilage fraction = proportion of containers with `consumer_spoil_times <= reference_consumer_days`
    - Retail waste (liters) = `pct_spoiled_at_retail / 100 × containers × 1.893`
-   - Total spoilage = `Median_Proportion` at reference day (interpolated from `SpoilStats_all`)
    - Consumer waste (liters) = `(total_spoilage - retail_spoilage) × containers × 1.893`
 
 3. **CO₂e calculation**:

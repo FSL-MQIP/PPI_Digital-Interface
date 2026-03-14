@@ -732,7 +732,8 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   return(list(
     SpoilStats_all = SpoilStats_all,
     pct_spoiled_at_retail = pct_spoiled_at_retail,
-    days_to_25pct_consumer = days_to_25pct_consumer
+    days_to_25pct_consumer = days_to_25pct_consumer,
+    consumer_spoil_times = spoil_times
   ))
 }
 
