@@ -69,3 +69,16 @@ Added a ggplot2 visualization to the output panel showing predicted spoiled % ov
 - When median crosses 25%, a vertical dotted line and label show the interpolated shelf life day
 
 Plot appears above the (now collapsible) spoilage statistics table.
+
+## 2026-03-14: Dynamic Temperature Support for D Pathway
+
+Added support for hourly temperature profiles in the D pathway (Baranyi ODE) growth model. Previously, uploaded hourly temperature CSVs were reduced to mean/SD, losing all temporal detail. Now the raw time-series is preserved and passed directly to the ODE solver via `approxfun`, enabling more realistic growth predictions that respond to actual temperature fluctuations.
+
+Key changes:
+- `extract_temp_profile()` helper preserves raw time-temperature data from uploaded CSVs
+- `build_env_conditions()` constructs variable-length temperature profiles for the ODE solver, splicing in hourly data for stages that have it and 2-point step functions for stages using defaults
+- Stage duration is determined by the profile span when hourly data is provided
+- BCLc pathway unchanged (continues using mean temperature)
+- No UI changes — existing CSV upload flow automatically detects and uses hourly profiles
+
+Files modified: `utils/helpers.R`, `App.R`, `model/run_model.R`

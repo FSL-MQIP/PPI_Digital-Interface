@@ -24,3 +24,4 @@
 - (2026-03-12) Back button now resets Q1 and Q2 (repurposed with APC feature)
 - (2026-03-12) Redundant `process_csv_file` call resolved
 - (2026-03-12) Time SD=0 for user uploads documented in ADR 002
+- (2026-03-14) Dynamic temperature support: D pathway ODE solver uses hourly temperature profiles from uploaded CSVs
