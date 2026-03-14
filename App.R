@@ -31,6 +31,20 @@ for (stage in names(default_profile_paths)) {
   }
 }
 
+# Load scenario temperature profiles
+scenario_profiles <- list()
+for (name in names(scenario_profile_paths)) {
+  info <- scenario_profile_paths[[name]]
+  if (file.exists(info$path)) {
+    data <- read.csv(info$path, stringsAsFactors = FALSE)
+    scenario_profiles[[name]] <- list(
+      profile = extract_temp_profile(data),
+      stage = info$stage,
+      label = info$label
+    )
+  }
+}
+
 # Configure parallel processing for model
 # Adaptive configuration: use sequential processing on shinyapps.io to avoid resource limits
 # shinyapps.io has limited resources and multisession plans can cause startup failures
@@ -120,7 +134,8 @@ ui <- dashboardPage(
               status = "danger",
               solidHeader = TRUE,
               uiOutput("question1_ui"),
-              uiOutput("question2_ui")
+              uiOutput("question2_ui"),
+              uiOutput("question3_ui")
             ),
             uiOutput("input_section")
           ),
@@ -141,6 +156,7 @@ server <- function(input, output, session) {
   
   # Reactive value to track if Question 2 is completed
   q2_completed <- reactiveVal(FALSE)
+  q3_completed <- reactiveVal(FALSE)
 
   # Reactive values for APC (microbial concentration) input
   q1_completed <- reactiveVal(FALSE)
@@ -270,10 +286,47 @@ server <- function(input, output, session) {
       )
     )
   })
-  
+
+  # Render Question 3 UI (Disruption Scenarios)
+  output$question3_ui <- renderUI({
+    if (!q2_completed()) return(NULL)
+
+    tagList(
+      br(), hr(),
+      h4("Disruption Scenarios"),
+      p("Optionally select supply chain disruption scenarios to simulate:"),
+
+      selectInput(
+        "scenario_fs",
+        "Facility Storage Scenario:",
+        choices = c(
+          "None (Baseline)" = "none",
+          "S1: Storage Cooling System Disruption" = "s1",
+          "S2: Delivery Delay" = "s2"
+        ),
+        selected = "none"
+      ),
+
+      selectInput(
+        "scenario_dl",
+        "Delivery Scenario:",
+        choices = c(
+          "None (Baseline)" = "none",
+          "S3: Temp Increase (Trunk Opening)" = "s3",
+          "S4: Delivery Cooling System Disruption" = "s4"
+        ),
+        selected = "none"
+      ),
+
+      br(),
+      actionButton("back_q2", "Back", class = "btn-default"),
+      actionButton("next_q3", "Continue", class = "btn-primary")
+    )
+  })
+
   # Render input section (left panel: file uploads + submit)
   output$input_section <- renderUI({
-    if (!q2_completed()) {
+    if (!q3_completed()) {
       return(NULL)
     }
 
@@ -289,7 +342,7 @@ server <- function(input, output, session) {
 
   # Render output section (right panel: summary + results)
   output$output_section <- renderUI({
-    if (!q2_completed()) {
+    if (!q3_completed()) {
       return(NULL)
     }
 
@@ -322,6 +375,7 @@ server <- function(input, output, session) {
   
   # Handle navigation buttons
   observeEvent(input$back_q1, {
+    q3_completed(FALSE)
     q2_completed(FALSE)
     q1_completed(FALSE)
     updateRadioButtons(session, "has_temperature_data", selected = character(0))
@@ -355,7 +409,20 @@ server <- function(input, output, session) {
     }
     q2_completed(TRUE)
   })
-  
+
+  # Q3 Continue
+  observeEvent(input$next_q3, {
+    q3_completed(TRUE)
+  })
+
+  # Q3 Back — reset Q3 and go back to Q2
+  observeEvent(input$back_q2, {
+    q3_completed(FALSE)
+    q2_completed(FALSE)
+    updateRadioButtons(session, "has_temperature_data", selected = character(0))
+    updateCheckboxGroupInput(session, "selected_stages", selected = character(0))
+  })
+
   # Observe file uploads and extract statistics for each stage
   observeEvent(input$csv_file_processing_facility, {
     if (!is.null(input$csv_file_processing_facility)) {
@@ -564,31 +631,62 @@ server <- function(input, output, session) {
           time_mean <- time_params$mean
           time_sd <- time_params$sd
         }
-        
+
+        # Check if a scenario overrides this stage (temperature only)
+        time_source <- source
+        scenario_key <- NULL
+        if (stage == "processing_facility" && !is.null(input$scenario_fs) && input$scenario_fs != "none") {
+          scenario_key <- input$scenario_fs
+        } else if (stage == "transportation_facility_to_retail" && !is.null(input$scenario_dl) && input$scenario_dl != "none") {
+          scenario_key <- input$scenario_dl
+        }
+        if (!is.null(scenario_key) && !is.null(scenario_profiles[[scenario_key]])) {
+          sp <- scenario_profiles[[scenario_key]]$profile
+          source <- paste0("Scenario (", scenario_profiles[[scenario_key]]$label, ")")
+          temp_mean <- round(mean(sp$temperature), 4)
+          temp_sd <- round(sd(sp$temperature), 4)
+        }
+
         # Add Temperature row
         summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
           stage_label, "Temperature", source, temp_mean, temp_sd, "degree C"
         )
-        
+
         # Add Time row
         summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Time", source, time_mean, time_sd, "day"
+          stage_label, "Time", time_source, time_mean, time_sd, "day"
         )
       }
     } else if (!is.null(input$has_temperature_data) && input$has_temperature_data == "no") {
       # User doesn't have temperature data - show all stages with default parameters
       for (stage in all_stages) {
         stage_label <- get_stage_label(stage)
-        
+
         # Get default parameters
         temp_params <- get_default_params(stage, "temperature")
         time_params <- get_default_params(stage, "time")
-        
+
+        source <- "Default"
+
+        # Check if a scenario overrides this stage
+        scenario_key <- NULL
+        if (stage == "processing_facility" && !is.null(input$scenario_fs) && input$scenario_fs != "none") {
+          scenario_key <- input$scenario_fs
+        } else if (stage == "transportation_facility_to_retail" && !is.null(input$scenario_dl) && input$scenario_dl != "none") {
+          scenario_key <- input$scenario_dl
+        }
+        if (!is.null(scenario_key) && !is.null(scenario_profiles[[scenario_key]])) {
+          sp <- scenario_profiles[[scenario_key]]$profile
+          source <- paste0("Scenario (", scenario_profiles[[scenario_key]]$label, ")")
+          temp_params$mean <- round(mean(sp$temperature), 4)
+          temp_params$sd <- round(sd(sp$temperature), 4)
+        }
+
         # Add Temperature row
         summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Temperature", "Default", temp_params$mean, temp_params$sd, "degree C"
+          stage_label, "Temperature", source, temp_params$mean, temp_params$sd, "degree C"
         )
-        
+
         # Add Time row
         summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
           stage_label, "Time", "Default", time_params$mean, time_params$sd, "day"
@@ -685,6 +783,25 @@ server <- function(input, output, session) {
           user_apc_mean <- if (apc_source() != "Default") apc_mean() else NULL
           user_apc_sd <- if (apc_source() != "Default") apc_sd() else NULL
 
+          # Build effective profiles: baselines + scenario overrides
+          effective_profiles <- default_profiles
+
+          if (!is.null(input$scenario_fs) && input$scenario_fs != "none") {
+            key <- input$scenario_fs
+            if (!is.null(scenario_profiles[[key]])) {
+              stage <- scenario_profiles[[key]]$stage
+              effective_profiles[[stage]] <- scenario_profiles[[key]]$profile
+            }
+          }
+
+          if (!is.null(input$scenario_dl) && input$scenario_dl != "none") {
+            key <- input$scenario_dl
+            if (!is.null(scenario_profiles[[key]])) {
+              stage <- scenario_profiles[[key]]$stage
+              effective_profiles[[stage]] <- scenario_profiles[[key]]$profile
+            }
+          }
+
           # Run the model (sampling logic is now inside the function)
           # t_H (total shelf-life horizon) defaults to 35 inside run_spoilage_model
           result <- run_spoilage_model(
@@ -694,7 +811,7 @@ server <- function(input, output, session) {
             selected_stages = selected_stages,
             apc_mean = user_apc_mean,
             apc_sd = user_apc_sd,
-            default_profiles = default_profiles,
+            default_profiles = effective_profiles,
             progress_callback = progress_callback
           )
           
