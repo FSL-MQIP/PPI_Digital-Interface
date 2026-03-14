@@ -1,5 +1,6 @@
 # Default time and temperature parameters for each supply chain stage
 # Used when user does not provide their own data
+# Values computed from baseline CSVs (mean/SD of temperature, time span from first to last timestamp)
 
 # Default microbial concentration parameters
 default_microbial <- list(
@@ -11,46 +12,32 @@ default_microbial <- list(
 default_parameters <- list(
   processing_facility = list(
     temperature = list(
-      min = 3.5,
-      max = 4.5,
-      mean = 4,
-      sd = 0.289
+      mean = 1.7037,
+      sd = 0.1111
     ),
     time = list(
-      min = 1,
-      max = 2,
-      mean = 1.5,
-      sd = 0.289
+      mean = 2.4264,
+      sd = 0
     )
   ),
   transportation_facility_to_retail = list(
     temperature = list(
-      min = 1.7,
-      max = 10.0,
-      mode = 4.4,
-      mean = 5.37,
-      sd = 1.72
+      mean = 4.549,
+      sd = 0.8403
     ),
     time = list(
-      min = 1,
-      max = 10,
-      mode = 5,
-      mean = 5.33,
-      sd = 1.84
+      mean = 0.3299,
+      sd = 0
     )
   ),
   retail = list(
     temperature = list(
-      a = -1.4,
-      b = 5.4,
-      mean = 2.3,
-      sd = 1.8
+      mean = 6.5,
+      sd = 0
     ),
     time = list(
-      a = 0.042,
-      b = 10.0,
-      mean = 1.821,
-      sd = 3.3
+      mean = 5.4583,
+      sd = 0
     )
   ),
   transportation_retail_to_home = list(
@@ -69,15 +56,20 @@ default_parameters <- list(
   ),
   consumer = list(
     temperature = list(
-      mean = 4.06,
-      sd = 2.31,
-      a = -1,
-      b = 15
+      mean = 6.5,
+      sd = 0
     ),
     time = list(
-      mean = 28,
+      mean = 27.9583,
       sd = 0
     )
   )
 )
 
+default_profile_paths <- list(
+  processing_facility = "input_data/baseline_facility_storage.csv",
+  transportation_facility_to_retail = "input_data/baseline_transport_to_retail.csv",
+  retail = "input_data/baseline_retail.csv",
+  transportation_retail_to_home = NULL,
+  consumer = "input_data/baseline_consumer.csv"
+)
