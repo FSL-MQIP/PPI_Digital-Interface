@@ -15,17 +15,22 @@ The application supports the following supply chain stages:
 
 ## Features
 
-- **Interactive Dashboard**: User-friendly interface built with Shiny Dashboard
+- **Interactive Dashboard**: User-friendly interface built with Shiny Dashboard (Cornell red theme)
 - **Monte Carlo Simulation**: Two-dimensional Monte Carlo simulation for robust spoilage prediction
-- **Flexible Data Input**: Accept user-provided time-temperature profiles or use default parameters
+- **Custom APC Input**: Enter microbial concentration manually or upload APC measurement CSV
+- **Flexible Data Input**: Accept user-provided time-temperature profiles or use baseline profiles
+- **Dynamic Temperature Profiles**: D pathway ODE solver uses hourly temperature profiles for realistic growth modeling
+- **Disruption Scenarios**: Four pre-configured disruption scenarios (S1-S4) that can be combined
+- **Spoilage Prediction Plot**: Median spoiled % over time with P25-P75 interquartile ribbon
+- **Key Metrics**:
+  - Pre-consumer spoilage rate (% spoiled at end of retail)
+  - Consumer shelf life (days until 25% of containers spoiled)
+- **Economic & Environmental Analysis**: Scenario vs baseline comparison showing economic loss and CO₂e impact
 - **CSV Upload**: Support for time-temperature profile uploads with automatic statistics extraction
-- **Robust Date Parsing**: Handles multiple date/time formats (YYYY-MM-DD HH:MM:SS, MM/DD/YYYY, numeric days, etc.)
-- **Real-time Summary**: Displays a comprehensive summary of all input parameters
-- **Default Parameters**: Pre-configured default values for all supply chain stages based on empirical data
-- **Parallel Processing**: Utilizes 16 parallel workers for efficient model execution
+- **Robust Date Parsing**: Handles multiple date/time formats
+- **Parallel Processing**: Adaptive configuration (sequential on shinyapps.io, multisession locally)
 - **Progress Tracking**: Real-time progress indicators during model execution
-- **Statistical Output**: Provides median, mean, standard deviation, and percentiles (5th, 25th, 75th, 95th) for spoilage predictions
-- **Multi-day Predictions**: Predicts spoilage percentages at days 7, 14, 21, 28, and 35
+- **Statistical Output**: Median, mean, SD, and percentiles (5th, 25th, 75th, 95th) for spoilage predictions at days 7, 14, 21, 28, and 35
 
 ## Installation
 
@@ -57,7 +62,7 @@ install.packages(c(
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/chenhaoq87/PPI_Digital-Interface.git
+   git clone https://github.com/FSL-MQIP/PPI_Digital-Interface.git
    cd PPI_Digital-Interface
    ```
 
@@ -65,50 +70,43 @@ install.packages(c(
    ```r
    shiny::runApp()
    ```
-   
-   Or directly run the app file:
-   ```r
-   source("App.R")
-   ```
 
 3. **Access the application:**
    The app will open in your default web browser or in the RStudio Viewer pane.
 
 ### Using the Application
 
-#### Step 1: Intro Tab
-- Review the model overview, developer information, funding details, and disclaimers
-- Understand the purpose and limitations of the model
-- Access contact information for the development team
+#### Step 1: Microbial Concentration (Q1)
+- Choose to use default APC values (mean: 3.52, SD: 0.70 log₁₀ CFU/mL) or provide custom data
+- **Manual entry**: Enter mean and SD directly
+- **CSV upload**: Upload a CSV of raw APC measurements (auto-fits normal distribution; raw CFU/mL values are automatically log₁₀-transformed)
 
-#### Step 2: Model Tab - Temperature Data
+#### Step 2: Temperature Data & Scenarios (Q2)
 - Indicate whether you have temperature data for any supply chain stages
-- **If Yes**: Select which stages you have data for
-- **If No**: The application will use default temperature data for all stages
-- Click **"Continue"** to proceed
+- **If Yes**: Select stages and upload CSV files with time-temperature profiles
+- **If No**: Baseline temperature profiles are used
+- **Disruption Scenarios** (optional): Select from two independent dropdowns:
+  - Facility Storage: S1 (Storage Cooling System Disruption) or S2 (Delivery Delay)
+  - Delivery: S3 (Temp Increase from Trunk Opening) or S4 (Delivery Cooling System Disruption)
+  - Scenarios can be combined (one from each dropdown)
+  - Scenarios override baseline and user data for their respective stage
 
-#### Step 3: Data Input
-- For each selected supply chain stage, upload a CSV file with time-temperature profiles
-- CSV files must contain exactly two columns: `time` and `temperature`
-- The application automatically extracts mean and standard deviation statistics from uploaded files
-- **Time formats supported:**
-  - YYYY-MM-DD HH:MM:SS (e.g., 2024-01-15 10:30:00)
-  - MM/DD/YYYY HH:MM:SS (e.g., 12/17/2025 10:00:00)
-  - MM/DD/YYYY HH:MM
-  - Numeric days (e.g., 0, 0.5, 1.0, 1.5)
-  - Other standard date formats
-
-#### Step 4: Prediction
-- Review the summary table showing all input parameters (microbial concentration, temperature, and time for each stage)
+#### Step 3: Data Input & Prediction
+- Set **containers per lot** (default: 1000 half-gallon containers) for economic/environmental analysis
+- Review the summary table showing all input parameters
 - Click **"Predict"** to run the Monte Carlo simulation
-- The model will run with progress indicators (this may take a few moments)
-- Results will be displayed in a table showing spoilage statistics for days 7, 14, 21, 28, and 35
 
-**Note**: The application currently uses default microbial concentration values (mean: 3.52 log10CFU/mL, SD: 0.70 log10CFU/mL) from bulk tank raw milk. Custom microbial concentration input may be available in future versions.
+#### Results
+- **Pre-Consumer Spoilage**: % of containers spoiled before consumer purchase (end of retail)
+- **Consumer Shelf Life**: Days of consumer storage until 25% of containers are spoiled
+- **Economic Loss** (when scenario active): Dollar loss from reduced shelf life vs baseline ($0.03/unit/day)
+- **Environmental Emission** (when scenario active): Delta CO₂e from additional waste (retail→landfill, consumer→wastewater)
+- **Spoilage Plot**: Median spoiled % over days 7-35 with P25-P75 ribbon
+- **Spoilage Statistics Table**: Detailed statistics at each time point
 
 ### CSV File Format
 
-Time-temperature profile CSV files should have the following format:
+Time-temperature profile CSV files should have two columns: `time` and `temperature`.
 
 ```csv
 time,temperature
@@ -118,62 +116,42 @@ time,temperature
 2024-01-15 14:00:00,4.3
 ```
 
+Supported time formats: `YYYY-MM-DD HH:MM:SS`, `MM/DD/YYYY HH:MM:SS`, `MM/DD/YYYY HH:MM`, numeric days.
+
+APC CSV files should have one column of APC values (CFU/mL or log₁₀ CFU/mL). Column name should be `apc`, `cfu`, or `count`.
+
 ## Project Structure
 
 ```
 PPI_Digital-Interface/
-│
-├── App.R                       # Main Shiny application file
+├── App.R                          # Main Shiny application (UI + server)
 ├── config/
-│   └── default_parameters.R    # Default parameters for all supply chain stages
+│   └── default_parameters.R      # Default parameters, baseline/scenario paths
 ├── css/
-│   └── styles.css              # Custom styling for the application
+│   └── styles.css                # Cornell red theme styling
+├── model/
+│   └── run_model.R               # Model execution function
 ├── utils/
-│   ├── helpers.R               # Utility functions for data processing
-│   └── model_helpers.R         # Model-related utility functions
-├── input_data/                 # Directory for input data files
-│   ├── ModelData_BCLc_input.csv
-│   └── ModelData_D_input.csv
-├── model/                      # Directory for prediction model files
-│   ├── Model.R                 # Standalone model script
-│   └── run_model.R             # Model execution function for Shiny app
-├── LICENSE                     # MIT License
-└── README.md                   # This file
+│   ├── helpers.R                 # Data processing utilities
+│   └── model_helpers.R           # Growth model functions
+├── input_data/
+│   ├── ModelData_BCLc_input.csv  # Pre-generated BCLc container data
+│   ├── ModelData_D_input.csv     # Pre-generated D container data
+│   ├── baseline_*.csv            # Baseline temperature profiles (4 stages)
+│   ├── scenario_s*.csv           # Disruption scenario profiles (S1-S4)
+│   └── baseline_result.rds       # Precomputed baseline model results
+├── scripts/
+│   └── precompute_baseline.R     # Script to regenerate baseline_result.rds
+├── test_data/
+│   ├── test_backend.R            # Backend integration tests (7 tests)
+│   ├── test_comparison.R         # Scenario vs baseline comparison tests
+│   └── *.csv                     # Mock test data files
+├── docs/
+│   ├── development.md            # Development log
+│   ├── kanban.md                 # Feature tracking
+│   └── adr/                      # Architecture Decision Records
+└── README.md
 ```
-
-## Default Parameters
-
-The application includes default parameters for all supply chain stages when user data is not provided. These values are based on empirical data from the dairy supply chain:
-
-### Microbial Concentration (Bulk Tank Raw Milk)
-- Mean: 3.52 log10CFU/mL
-- SD: 0.70 log10CFU/mL
-- Distribution: Normal
-
-### Processing Facility
-- Temperature: Mean 4°C, SD 0.289°C (Range: 3.5-4.5°C)
-- Time: Mean 1.5 days, SD 0.289 days (Range: 1-2 days)
-- Distribution: Truncated normal
-
-### Transportation (Facility to Retail)
-- Temperature: Mean 5.37°C, SD 1.72°C (Range: 1.7-10.0°C, Mode: 4.4°C)
-- Time: Mean 5.33 days, SD 1.84 days (Range: 1-10 days, Mode: 5 days)
-- Distribution: Triangular
-
-### Retail
-- Temperature: Mean 2.3°C, SD 1.8°C (Range: -1.4 to 5.4°C)
-- Time: Mean 1.821 days, SD 3.3 days (Range: 0.042 to 10.0 days)
-- Distribution: Laplace
-
-### Transportation (Retail to Home)
-- Temperature: Mean 8.5°C, SD 1.0°C (Range: 0-10°C)
-- Time: Mean 0.04 days, SD 0.02 days (Range: 0.01-0.24 days)
-- Distribution: Uniform
-
-### Consumer
-- Temperature: Mean 4.06°C, SD 2.31°C (Range: -1 to 15°C)
-- Time: Mean 28 days, SD 0 days (Fixed)
-- Distribution: Truncated normal
 
 ## Model Methodology
 
@@ -182,10 +160,37 @@ The model uses a two-dimensional Monte Carlo simulation approach:
 1. **Microbial Community Modeling**: Incorporates metagenomic-informed community composition with taxon-specific characteristics
 2. **Heat Resistance**: Models survival during HTST pasteurization for different bacterial taxa (spore-formers, thermodurics, heat-sensitive)
 3. **Growth Modeling**: Uses temperature-dependent growth models:
-   - Buchanan model without lag phase for certain bacterial groups
-   - Dynamic growth model with reduced Ratkowsky temperature dependence for others
-4. **Spoilage Threshold**: Milk is considered spoiled when total bacterial concentration exceeds 6 log10 CFU/mL (1,000,000 CFU/mL)
+   - **BCLc pathway** (medium-growth bacteria): Buchanan model without lag phase, using mean stage temperatures
+   - **D pathway** (high-growth bacteria): Dynamic ODE solver (Baranyi model) with reduced Ratkowsky temperature dependence, using hourly temperature profiles
+   - **A pathway** (no growth): Concentration remains at initial level
+4. **Spoilage Threshold**: Milk is considered spoiled when total bacterial concentration exceeds 6 log₁₀ CFU/mL (1,000,000 CFU/mL)
 5. **Statistical Analysis**: Calculates spoilage statistics across multiple lots and containers at days 7, 14, 21, 28, and 35
+
+### Economic Analysis
+
+When a disruption scenario is active, the economic impact is computed as:
+
+```
+economic_loss = (baseline_shelf_life - scenario_shelf_life) × $0.03/unit × containers_per_lot
+```
+
+The $0.03/unit/day value is from Lau et al. (2023), estimating the added value of one additional day of fluid milk shelf life.
+
+### Environmental Analysis
+
+CO₂e emissions are computed using EPA WARM model factors, differentiated by disposal pathway:
+- **Retail waste → landfill**: 0.55 kg CO₂e per liter
+- **Consumer waste → wastewater**: 0.2 kg CO₂e per liter
+
+Spoilage is evaluated at the baseline's consumer shelf-life day using per-container spoil times, ensuring consistent comparison regardless of pre-consumer stage durations.
+
+### Baseline Precomputation
+
+Baseline model results are precomputed and stored in `input_data/baseline_result.rds` for fast app startup. To regenerate after changing default parameters or input data:
+
+```r
+Rscript scripts/precompute_baseline.R
+```
 
 ## Developers
 
@@ -225,59 +230,3 @@ For questions, issues, or contributions, please:
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Future Enhancements
-
-- [ ] Custom microbial concentration input (currently uses defaults)
-- [ ] Export functionality for results (CSV, PDF reports)
-- [ ] Visualization of time-temperature profiles
-- [ ] Interactive plots for spoilage predictions over time
-- [ ] Batch processing capabilities for multiple scenarios
-- [ ] Advanced statistical analysis options
-- [ ] Sensitivity analysis tools
-- [ ] Comparison of different supply chain scenarios
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: CSV file upload fails
-- **Solution**: Ensure your CSV file has exactly two columns named `time` and `temperature`
-
-**Issue**: Date parsing errors
-- **Solution**: Use recommended format YYYY-MM-DD HH:MM:SS or numeric days
-
-**Issue**: Application doesn't start
-- **Solution**: Verify all required packages are installed:
-  ```r
-  install.packages(c(
-    "shiny", "shinydashboard", "tidyverse", "fitdistrplus",
-    "rmutil", "truncnorm", "EnvStats", "MCMCpack", "furrr", "deSolve"
-  ))
-  ```
-
-**Issue**: Model runs slowly
-- **Solution**: The model uses parallel processing with 16 workers. Ensure your system has sufficient CPU cores. You can adjust the number of workers in `App.R` (line 25) if needed.
-
-## Technical Details
-
-- **Framework**: Shiny R
-- **UI Framework**: shinydashboard
-- **Language**: R (version 4.0 or higher recommended)
-- **Parallel Processing**: furrr package with 16 workers (multisession)
-- **Model Version**: 2024-10-11
-- **License**: MIT
-
-### Key Dependencies
-
-- **shiny**: Web application framework
-- **shinydashboard**: Dashboard UI components
-- **tidyverse**: Data manipulation and transformation
-- **fitdistrplus**: Probability distribution fitting
-- **rmutil**: Laplace distribution functions
-- **truncnorm**: Truncated normal distribution functions
-- **EnvStats**: Environmental statistics (truncated normal, triangular distributions)
-- **MCMCpack**: Dirichlet distribution for sampling relative abundances
-- **furrr**: Parallel processing with future_map()
-- **deSolve**: Ordinary differential equation solver for dynamic growth modeling
-
