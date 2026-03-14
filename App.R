@@ -21,6 +21,16 @@ source("utils/model_helpers.R")
 # Source model execution function
 source("model/run_model.R")
 
+# Load baseline temperature profiles from CSV files
+default_profiles <- list()
+for (stage in names(default_profile_paths)) {
+  path <- default_profile_paths[[stage]]
+  if (!is.null(path) && file.exists(path)) {
+    data <- read.csv(path, stringsAsFactors = FALSE)
+    default_profiles[[stage]] <- extract_temp_profile(data)
+  }
+}
+
 # Configure parallel processing for model
 # Adaptive configuration: use sequential processing on shinyapps.io to avoid resource limits
 # shinyapps.io has limited resources and multisession plans can cause startup failures
@@ -684,6 +694,7 @@ server <- function(input, output, session) {
             selected_stages = selected_stages,
             apc_mean = user_apc_mean,
             apc_sd = user_apc_sd,
+            default_profiles = default_profiles,
             progress_callback = progress_callback
           )
           
