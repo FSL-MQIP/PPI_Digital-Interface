@@ -3,6 +3,8 @@
 ## Backlog
 
 - Implement control strategies (intervention options to reduce spoilage)
+- Make supply chain stages more modular (configurable number/order of stages)
+- Incorporate Post-Pasteurization Contamination (PPC) as a possible spoilage mechanism
 
 
 ## In Progress
