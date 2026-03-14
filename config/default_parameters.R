@@ -73,3 +73,26 @@ default_profile_paths <- list(
   transportation_retail_to_home = NULL,
   consumer = "input_data/baseline_consumer.csv"
 )
+
+scenario_profile_paths <- list(
+  s1 = list(
+    path = "input_data/scenario_s1_storage_cooling_disruption.csv",
+    stage = "processing_facility",
+    label = "S1: Storage Cooling System Disruption"
+  ),
+  s2 = list(
+    path = "input_data/scenario_s2_delivery_delay.csv",
+    stage = "processing_facility",
+    label = "S2: Delivery Delay"
+  ),
+  s3 = list(
+    path = "input_data/scenario_s3_trunk_opening.csv",
+    stage = "transportation_facility_to_retail",
+    label = "S3: Temp Increase (Trunk Opening)"
+  ),
+  s4 = list(
+    path = "input_data/scenario_s4_delivery_cooling_disruption.csv",
+    stage = "transportation_facility_to_retail",
+    label = "S4: Delivery Cooling System Disruption"
+  )
+)
