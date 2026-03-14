@@ -56,7 +56,7 @@ simulate_growth_row <- function(row_data, t_H_total) {
   return(result_df)
 }
 
-run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_stats = NULL, selected_stages = NULL, t_H = NULL, apc_mean = NULL, apc_sd = NULL, progress_callback = NULL) {
+run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_stats = NULL, selected_stages = NULL, t_H = NULL, apc_mean = NULL, apc_sd = NULL, default_profiles = NULL, progress_callback = NULL) {
   
   # Set up progress reporting
   if (!is.null(progress_callback)) {
@@ -132,9 +132,40 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
   }
 
   # Process each stage - only update columns where user submitted data
-  all_stages <- c("processing_facility", "transportation_facility_to_retail", "retail", 
+  all_stages <- c("processing_facility", "transportation_facility_to_retail", "retail",
                   "transportation_retail_to_home", "consumer")
-  
+
+  # Apply baseline temperature profiles as defaults
+  # These are overridden later if user provides custom data
+  if (!is.null(default_profiles)) {
+    for (stage in all_stages) {
+      if (!is.null(default_profiles[[stage]])) {
+        cols <- stage_to_cols[[stage]]
+        temp_col <- cols$temp
+        time_col <- cols$time
+        profile <- default_profiles[[stage]]
+        profile_mean <- mean(profile$temperature)
+        profile_duration <- max(profile$time_days)
+
+        # Override BCLc temperature and duration with baseline values
+        if (temp_col %in% names(updated_data_bclc)) {
+          updated_data_bclc[[temp_col]] <- rep(profile_mean, nrow(updated_data_bclc))
+        }
+        if (time_col %in% names(updated_data_bclc)) {
+          updated_data_bclc[[time_col]] <- rep(profile_duration, nrow(updated_data_bclc))
+        }
+
+        # Override D temperature and duration with baseline values
+        if (temp_col %in% names(updated_data_d)) {
+          updated_data_d[[temp_col]] <- rep(profile_mean, nrow(updated_data_d))
+        }
+        if (time_col %in% names(updated_data_d)) {
+          updated_data_d[[time_col]] <- rep(profile_duration, nrow(updated_data_d))
+        }
+      }
+    }
+  }
+
   for (stage in all_stages) {
     # Get column names for this stage
     cols <- stage_to_cols[[stage]]
@@ -208,8 +239,16 @@ run_spoilage_model <- function(ModelData_BCLc_input, ModelData_D_input, stage_st
     # If has_user_data is FALSE, columns keep their original values from input data
   }
 
-  # Collect hourly temperature profiles for D pathway
+  # Start with default baseline profiles, then override with user-uploaded ones
   temp_profiles <- list()
+  if (!is.null(default_profiles)) {
+    for (stage in all_stages) {
+      if (!is.null(default_profiles[[stage]])) {
+        temp_profiles[[stage]] <- default_profiles[[stage]]
+      }
+    }
+  }
+  # Override with user-uploaded profiles
   for (stage in all_stages) {
     if (!is.null(selected_stages) && stage %in% selected_stages &&
         !is.null(stage_stats) && !is.null(stage_stats[[stage]]) &&
