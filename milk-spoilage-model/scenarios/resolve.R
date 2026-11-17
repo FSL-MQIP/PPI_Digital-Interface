@@ -17,8 +17,7 @@ conflict_check <- function(interventions, disruptions, cfg) {
 
   # The caller repeats this text to the processor, so it has to name what the run
   # actually did with the two layers. Interventions run first (step 1 below), and
-  # only a replacing disruption discards that work -- every disruption preset
-  # expands to one (dairy-api/r_bridge/run_simulation.R). The rest compose: a
+  # only a replacing disruption (profile_csv) discards that work. The rest compose: a
   # temp_shift ADDS its offset to the already-shifted profile, and temp_spike and
   # delay append a segment after it. disruption_replaces_profile() holds which is
   # which, beside the cascade that implements it. Saying "overrides" for all four

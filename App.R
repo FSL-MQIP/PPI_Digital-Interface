@@ -21,11 +21,11 @@ with_model_dir <- function(expr) {
 }
 
 with_model_dir({
-  source("run_model_20260929.R")
+  source("run_model.R")
 })
 
 # =============================================================================
-# STAGE METADATA (mirrors dairy-api/r_bridge/run_simulation.R)
+# STAGE METADATA
 # =============================================================================
 stages_meta <- list(
   processing_facility = list(label = "Processing Facility"),
