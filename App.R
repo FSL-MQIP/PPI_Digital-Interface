@@ -1,89 +1,149 @@
+# Milk Spoilage Predictor — Shiny App
+# UI on top of milk-spoilage-model/run_model.R (PPC + non-PPC pathway simulation).
+
 library(shiny)
 library(shinydashboard)
-library(tidyverse)      # Data manipulation: filter, mutate, select, group_by, left_join, etc.
-library(fitdistrplus)   # Fit probability distributions to data
-library(rmutil)         # Laplace distribution functions
-library(truncnorm)      # Truncated normal distribution functions
-library(EnvStats)       # Environmental statistics: truncated normal and triangular distributions
-library(MCMCpack)       # Dirichlet distribution for sampling relative abundances
-library(furrr)          # Parallel processing with future_map() and plan()
-library(deSolve)        # Ordinary differential equation solver (used by predict_dynamic_growth)
+library(ggplot2)
 
-# Source default parameters configuration
-source("config/default_parameters.R")
+# =============================================================================
+# LOAD THE MODEL
+# =============================================================================
+# run_model.R sources config.R and the pathway/scenario modules with paths
+# relative to milk-spoilage-model/, and reads its input CSVs the same way on
+# every call (not just at source time). with_model_dir() makes that directory
+# current for the duration of a block, then restores the previous one.
+model_dir <- "milk-spoilage-model"
 
-# Source utility functions
-source("utils/helpers.R")
-
-# Source model helper functions
-source("utils/model_helpers.R")
-
-# Source model execution function
-source("model/run_model.R")
-
-# Load baseline temperature profiles from CSV files
-default_profiles <- list()
-for (stage in names(default_profile_paths)) {
-  path <- default_profile_paths[[stage]]
-  if (!is.null(path) && file.exists(path)) {
-    data <- read.csv(path, stringsAsFactors = FALSE)
-    default_profiles[[stage]] <- extract_temp_profile(data)
-  }
+with_model_dir <- function(expr) {
+  old_wd <- setwd(model_dir)
+  on.exit(setwd(old_wd), add = TRUE)
+  force(expr)
 }
 
-# Load scenario temperature profiles
-scenario_profiles <- list()
-for (name in names(scenario_profile_paths)) {
-  info <- scenario_profile_paths[[name]]
-  if (file.exists(info$path)) {
-    data <- read.csv(info$path, stringsAsFactors = FALSE)
-    scenario_profiles[[name]] <- list(
-      profile = extract_temp_profile(data),
-      stage = info$stage,
-      label = info$label
+with_model_dir({
+  source("run_model_20260929.R")
+})
+
+# =============================================================================
+# STAGE METADATA (mirrors dairy-api/r_bridge/run_simulation.R)
+# =============================================================================
+stages_meta <- list(
+  processing_facility = list(label = "Processing Facility"),
+  transportation_facility_to_retail = list(label = "Transport: Facility → Retail"),
+  retail = list(label = "Retail"),
+  transportation_retail_to_home = list(label = "Transport: Retail → Home"),
+  consumer = list(label = "Consumer")
+)
+stage_ids <- names(stages_meta)
+
+# ClosestST values present in input_data/ppc_st_frequency.csv ("9_23" is
+# already excluded from PPC sampling by pathways/ppc_pathway.R, so it is not
+# offered here).
+ppc_st_choices <- c("2", "6", "9", "13", "17", "23", "24", "36", "41", "48",
+                     "52", "56", "75", "81", "92", "100", "102")
+
+id_for <- function(prefix, stage) paste0(prefix, stage)
+
+# =============================================================================
+# APC CSV HELPER
+# =============================================================================
+# Accepts a CSV with one numeric column named 'apc', 'cfu', or 'count' (case-
+# insensitive) and returns its log10 mean/SD. A bulk-tank APC in raw CFU/mL is
+# always in the thousands-to-millions range, far above any plausible log10
+# value, so a median above 12 is treated as un-transformed CFU/mL and log10-ed
+# first; NULL if the file doesn't have a usable column.
+process_apc_csv <- function(file_input) {
+  if (is.null(file_input)) return(NULL)
+  df <- tryCatch(read.csv(file_input$datapath), error = function(e) NULL)
+  if (is.null(df) || ncol(df) == 0) return(NULL)
+
+  match_idx <- which(tolower(names(df)) %in% c("apc", "cfu", "count"))
+  if (length(match_idx) == 0) return(NULL)
+
+  vals <- suppressWarnings(as.numeric(df[[match_idx[1]]]))
+  vals <- vals[!is.na(vals) & vals > 0]
+  if (length(vals) < 2) return(NULL)
+
+  log_vals <- if (median(vals) > 12) log10(vals) else vals
+  list(mean = round(mean(log_vals), 3), sd = round(sd(log_vals), 3))
+}
+
+# =============================================================================
+# UI HELPERS
+# =============================================================================
+make_upload_ui <- function(stage, meta) {
+  wellPanel(
+    h5(meta$label),
+    fileInput(
+      id_for("override_csv_", stage),
+      tagList(
+        paste0("Upload measured time-temperature data for ", meta$label, ":"),
+        tags$span(
+          icon("circle-info", style = "margin-left: 5px; color: #B31B1B; cursor: help;"),
+          title = "CSV with exactly two columns: 'time' and 'temperature'. Time can be numeric days or a timestamp (e.g. 2026-02-11 21:44:58). Replaces this stage's baseline mean/SD/duration with the uploaded data."
+        )
+      ),
+      accept = ".csv"
     )
-  }
+  )
 }
 
-# Configure parallel processing for model
-# Adaptive configuration: use sequential processing on shinyapps.io to avoid resource limits
-# shinyapps.io has limited resources and multisession plans can cause startup failures
-if (Sys.getenv("SHINY_PORT") != "") {
-  # Running on shinyapps.io - use sequential processing (safest option)
-  plan(sequential)
-} else {
-  # Running locally - use parallel processing with available cores
-  available_cores <- parallel::detectCores()
-  workers <- min(4, max(1, available_cores - 1))  # Use at most 4 workers, leave 1 core free
-  plan(multisession, workers = workers)
-}
-
-# Load input data
-ModelData_BCLc_input <- read_csv("input_data/ModelData_BCLc_input.csv", show_col_types = FALSE)
-ModelData_D_input <- read_csv("input_data/ModelData_D_input.csv", show_col_types = FALSE)
-
-# Load precomputed baseline results (generated by scripts/precompute_baseline.R)
-baseline_precomputed <- readRDS("input_data/baseline_result.rds")
-
-# Define the UI
+# =============================================================================
+# UI
+# =============================================================================
 ui <- dashboardPage(
   skin = "red",
   dashboardHeader(
     title = tags$span(style = "font-size: 18px;", "Milk Shelf-life Predictor")
   ),
-  
+
   dashboardSidebar(
     sidebarMenu(
       menuItem("Intro", tabName = "intro", icon = icon("info-circle")),
       menuItem("Model", tabName = "model", icon = icon("calculator"))
     )
   ),
-  
+
   dashboardBody(
+    # Lower-right "model running" indicator. Toggled via session$sendCustomMessage()
+    # (server, observeEvent(input$run_model)) rather than a reactiveVal-driven
+    # renderUI: run_model() blocks R synchronously for the whole observer, and Shiny
+    # only flushes reactive UI updates once that observer returns, so a renderUI
+    # bound to a reactiveVal would just flash at the end instead of showing while
+    # the simulation is actually running. sendCustomMessage() writes straight to the
+    # websocket, the same immediate-delivery path showNotification()/withProgress()
+    # use, so it appears the instant the button is clicked.
     tags$head(
-      # Include custom CSS
-      includeCSS("css/styles.css")
+      tags$style(HTML("
+        #running_indicator {
+          display: none;
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          z-index: 9999;
+          background: #fff;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+          padding: 12px 18px;
+          align-items: center;
+          gap: 10px;
+        }
+      ")),
+      tags$script(HTML("
+        Shiny.addCustomMessageHandler('toggle-running-indicator', function(show) {
+          var el = document.getElementById('running_indicator');
+          if (el) el.style.display = show ? 'flex' : 'none';
+        });
+      "))
     ),
+    div(
+      id = "running_indicator",
+      tags$div(class = "spinner-border spinner-border-sm", role = "status",
+               style = "color: #B31B1B;", tags$span(class = "sr-only", "Loading...")),
+      tags$span("Running simulation...", style = "color: #541E1B; font-weight: 600;")
+    ),
+
     tabItems(
       # Intro Tab
       tabItem(
@@ -91,58 +151,188 @@ ui <- dashboardPage(
         fluidRow(
           box(
             width = 12,
-          h3("Model Overview"),
-          p("This model is a two-dimensional Monte Carlo simulation that predicts spoilage of HTST-pasteurized milk by explicitly modeling survival during pasteurization and subsequent growth of the bulk tank raw milk (BTRM) bacterial community across the supply chain. It integrates metagenomic-informed community composition, taxon-specific heat resistance (including spore-formers, thermodurics, and heat-sensitive taxa), and temperature-dependent growth to estimate lot-level spoilage risk over shelf life."),
-          br(),
-          h3("Developers"),
-          p("This web app is developed by researchers from ", 
-            tags$a(href = "https://cals.cornell.edu/food-safety-laboratory", target = "_blank", "Milk Quality Improvement Lab (MQIP)"), 
-            " in the department of food science at Cornell University. Our lab aims to leverage digital tools to facilitate management decision-making in reducing spoilage of dairy products and evaluating intervention strategies. For more information about what we do, please visit our ", 
-            tags$a(href = "https://cals.cornell.edu/food-safety-laboratory", target = "_blank", "lab website"), 
-            " and ", 
-            tags$a(href = "https://cals.cornell.edu/digital-dairy", target = "_blank", "digital dairy central hub"), 
-            "."),
-          br(),
-          h3("Funding"),
-          p("The funding of this work is supported by a grant to Rochester Institute of Technology's NYS Pollution Prevention Institute from the Environmental Protection Fund as administered by the NYS Department of Environmental Conservation."),
-          br(),
-          h3("Disclaimers"),
-          p("The models for predicting dairy spoilage (the 'Models') are provided 'as is' at no cost to the users. The predicted values provided by the Models are only estimations and not actual values obtained in a real milk supply chain. Actual values will differ from the Models predictions due to variations such as milk type, microbial load, pressure and other factors not covered by the Models. By using the Models the user is accepting economic and all other risks associated with it and remain responsible for compliance with all regulatory, food safety and other requirements related to their activities."),
-          br(),
-          p(tags$strong("CORNELL UNIVERSITY EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES IN CONNECTION WITH THE MODEL, INCLUDING BUT NOT LIMITED TO WARRANTIES OF FITNESS FOR A PARTICULAR PURPOSE, WARRANTIES OF MERCHANTABILITY, AND WARRANTIES OF NON-INFRINGEMENT.")),
-          br(),
-          p("By using the Models you acknowledge and agree to the foregoing and waive any and all claims of any kind and description against Cornell University, its officers, employees and agents, in connection with your use of the Model and any decisions you may make as a result of using the Model."),
-          br(),
-          h3("Contacts"),
-          p(tags$strong("Luke Qian"), " - Postdoctoral Associate. Email: ", tags$a(href = "mailto:cq87@cornell.edu", "cq87@cornell.edu")),
-          p(tags$strong("Leonie Kemmerling"), " - Ph.D. Student. Email: ", tags$a(href = "mailto:lk483@cornell.edu", "lk483@cornell.edu")),
-          p(tags$strong("Martin Wiedmann"), " - Gellert Family Professor in Food Safety. Email: ", tags$a(href = "mailto:mw16@cornell.edu", "mw16@cornell.edu"))
+            h3("Model Overview"),
+            p("This model is a Monte Carlo simulation that predicts spoilage of pasteurized milk across the supply chain, combining a taxon-specific bacterial growth model for the bulk tank raw milk community with an optional model for post-pasteurization contamination (PPC) by environmental Gram-negative bacteria introduced after pasteurization. Users can explore how PPC prevalence, processing interventions, and supply chain disruptions each affect predicted shelf life."),
+            br(),
+            h3("Developers"),
+            p("This web app is developed by researchers from ",
+              tags$a(href = "https://cals.cornell.edu/food-safety-laboratory", target = "_blank", "Milk Quality Improvement Lab (MQIP)"),
+              " in the department of food science at Cornell University. Our lab aims to leverage digital tools to facilitate management decision-making in reducing spoilage of dairy products and evaluating intervention strategies. For more information about what we do, please visit our ",
+              tags$a(href = "https://cals.cornell.edu/food-safety-laboratory", target = "_blank", "lab website"),
+              " and ",
+              tags$a(href = "https://cals.cornell.edu/digital-dairy", target = "_blank", "digital dairy central hub"),
+              "."),
+            br(),
+            h3("Funding"),
+            p("The funding of this work is supported by a grant to Rochester Institute of Technology's NYS Pollution Prevention Institute from the Environmental Protection Fund as administered by the NYS Department of Environmental Conservation."),
+            br(),
+            h3("Disclaimers"),
+            p("The models for predicting dairy spoilage (the 'Models') are provided 'as is' at no cost to the users. The predicted values provided by the Models are only estimations and not actual values obtained in a real milk supply chain. Actual values will differ from the Models predictions due to variations such as milk type, microbial load, pressure and other factors not covered by the Models. By using the Models the user is accepting economic and all other risks associated with it and remain responsible for compliance with all regulatory, food safety and other requirements related to their activities."),
+            br(),
+            p(tags$strong("CORNELL UNIVERSITY EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES IN CONNECTION WITH THE MODEL, INCLUDING BUT NOT LIMITED TO WARRANTIES OF FITNESS FOR A PARTICULAR PURPOSE, WARRANTIES OF MERCHANTABILITY, AND WARRANTIES OF NON-INFRINGEMENT.")),
+            br(),
+            p("By using the Models you acknowledge and agree to the foregoing and waive any and all claims of any kind and description against Cornell University, its officers, employees and agents, in connection with your use of the Model and any decisions you may make as a result of using the Model."),
+            br(),
+            h3("Contacts"),
+            p(tags$strong("Luke Qian"), " - Postdoctoral Associate. Email: ", tags$a(href = "mailto:cq87@cornell.edu", "cq87@cornell.edu")),
+            p(tags$strong("Leonie Kemmerling"), " - Ph.D. Student. Email: ", tags$a(href = "mailto:lk483@cornell.edu", "lk483@cornell.edu")),
+            p(tags$strong("Martin Wiedmann"), " - Gellert Family Professor in Food Safety. Email: ", tags$a(href = "mailto:mw16@cornell.edu", "mw16@cornell.edu"))
           )
         )
       ),
-      
+
       # Model Tab
       tabItem(
         tabName = "model",
         fluidRow(
-          # Left panel: inputs and submission
+          # Left panel: inputs
           column(
             width = 5,
             box(
               width = 12,
-              title = "Preliminary Questions",
+              title = "Simulation Settings",
               status = "danger",
               solidHeader = TRUE,
-              uiOutput("question1_ui"),
-              uiOutput("question2_ui")
+              numericInput("sim_duration", "Simulation duration (days):", value = config$sim_duration, min = 7, max = 90, step = 1)
             ),
-            uiOutput("input_section")
+
+            box(
+              width = 12,
+              title = "Post-Pasteurization Contamination (PPC)",
+              status = "danger",
+              solidHeader = TRUE,
+              radioButtons(
+                inputId = "include_ppc",
+                label = "Include post-pasteurization contamination in this simulation?",
+                choices = list("No" = "no", "Yes" = "yes"),
+                selected = "no"
+              ),
+              conditionalPanel(
+                condition = "input.include_ppc == 'yes'",
+                sliderInput("ppc_range", "PPC proportion of containers per lot (min - max):",
+                            min = 0, max = 1, value = c(0.05, 0.2), step = 0.01),
+                hr(),
+                h5("Advanced PPC interventions (optional)"),
+                numericInput("ppc_initial_reduction_log", "Reduce mean initial PPC level (log10 CFU/mL):",
+                             value = 0, min = 0, max = 5, step = 0.1),
+                selectizeInput("ppc_remove_st", "Remove PPC sequence types from sampling pool:",
+                               choices = ppc_st_choices, multiple = TRUE,
+                               options = list(placeholder = "none removed"))
+              )
+            ),
+
+            box(
+              width = 12,
+              title = "Raw Milk Microbial Load (APC)",
+              status = "danger",
+              solidHeader = TRUE,
+              radioButtons(
+                inputId = "has_apc_data",
+                label = "Do you have APC (Aerobic Plate Count) data for bulk tank raw milk?",
+                choices = list("No" = "no", "Yes" = "yes"),
+                selected = "no"
+              ),
+              conditionalPanel(
+                condition = "input.has_apc_data == 'yes'",
+                radioButtons(
+                  inputId = "apc_input_method",
+                  label = "How would you like to provide APC data?",
+                  choices = list("Enter mean and SD" = "manual", "Upload CSV file" = "csv"),
+                  selected = "manual"
+                ),
+                conditionalPanel(
+                  condition = "input.apc_input_method == 'manual'",
+                  numericInput("apc_manual_mean", "Mean (log10 CFU/mL):", value = 3.52, min = 0, max = 5, step = 0.01),
+                  numericInput("apc_manual_sd", "SD (log10 CFU/mL):", value = 0.70, min = 0, max = 2, step = 0.01)
+                ),
+                conditionalPanel(
+                  condition = "input.apc_input_method == 'csv'",
+                  fileInput(
+                    "apc_csv_file",
+                    tagList(
+                      "Upload APC measurements (CSV):",
+                      tags$span(
+                        icon("circle-info", style = "margin-left: 5px; color: #B31B1B; cursor: help;"),
+                        title = "Required format: CSV with one column of APC values (CFU/mL or log10 CFU/mL), named 'apc', 'cfu', or 'count'. Raw CFU/mL values are automatically log10-transformed."
+                      )
+                    ),
+                    accept = ".csv"
+                  ),
+                  uiOutput("apc_csv_feedback")
+                )
+              ),
+              conditionalPanel(
+                condition = "input.has_apc_data == 'no'",
+                p(em("Using the model's baseline raw milk microbial load (no override)."))
+              )
+            ),
+
+            box(
+              width = 12,
+              title = "Interventions: Spore Reduction",
+              status = "danger",
+              solidHeader = TRUE,
+              selectInput("spore_reduction_choice", "Spore removal method (non-PPC pathways):",
+                choices = c(
+                  "None" = "none",
+                  "Microfiltration (2.2 log)" = "microfiltration",
+                  "Microfiltration, low efficiency (0.6 log)" = "microfiltration_low",
+                  "Bactofugation, single (1.4 log)" = "bactofugation_single",
+                  "Bactofugation, double (2.0 log)" = "bactofugation_double",
+                  "Custom (enter measured value)" = "custom"
+                ),
+                selected = "none"
+              ),
+              conditionalPanel(
+                condition = "input.spore_reduction_choice == 'custom'",
+                numericInput("spore_reduction_custom", "Measured spore log reduction:", value = 1.0, min = 0, max = 10, step = 0.1)
+              )
+            ),
+
+            box(
+              width = 12,
+              title = "Custom Time-Temperature Data (Optional)",
+              status = "danger",
+              solidHeader = TRUE,
+              collapsible = TRUE,
+              collapsed = TRUE,
+              p(em("Upload your own measured time-temperature data for a stage instead of using its baseline profile. Leave a stage blank to keep the baseline.")),
+              do.call(tagList, lapply(stage_ids, function(s) make_upload_ui(s, stages_meta[[s]])))
+            ),
+
+            div(style = "margin-bottom: 20px;",
+                actionButton("run_model", "Run Simulation", class = "btn-primary btn-lg"))
           ),
 
-          # Right panel: summary and results
+          # Right panel: results
           column(
             width = 7,
-            uiOutput("output_section")
+            uiOutput("warnings_ui"),
+            uiOutput("metric_boxes"),
+            box(
+              width = 12,
+              title = "Predicted Spoilage Over Time",
+              status = "danger",
+              solidHeader = TRUE,
+              uiOutput("spoilage_plot_ui")
+            ),
+            box(
+              width = 12,
+              title = "Spoilage Summary",
+              status = "danger",
+              solidHeader = TRUE,
+              collapsible = TRUE,
+              div(style = "overflow-x: auto;", uiOutput("summary_table_ui"))
+            ),
+            box(
+              width = 12,
+              title = "Applied Interventions & Disruptions",
+              status = "danger",
+              solidHeader = TRUE,
+              collapsible = TRUE,
+              collapsed = TRUE,
+              uiOutput("applied_ui")
+            )
           )
         )
       )
@@ -150,315 +340,120 @@ ui <- dashboardPage(
   )
 )
 
-# Define the server
+# =============================================================================
+# SERVER
+# =============================================================================
 server <- function(input, output, session) {
-  
-  # Reactive value to track if Question 2 is completed
-  q2_completed <- reactiveVal(FALSE)
 
-  # Stored baseline result for economic/environmental comparison
-  baseline_result <- reactiveVal(baseline_precomputed)
-
-  # Reactive values for APC (microbial concentration) input
-  q1_completed <- reactiveVal(FALSE)
-  apc_mean <- reactiveVal(default_microbial$mean)
-  apc_sd <- reactiveVal(default_microbial$sd)
-  apc_source <- reactiveVal("Baseline")
-
-  # Reactive values to store temperature and time statistics for each stage
-  stage_stats <- reactiveValues(
-    processing_facility = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
-    transportation_facility_to_retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
-    retail = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
-    transportation_retail_to_home = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL),
-    consumer = list(temp_mean = NULL, temp_sd = NULL, time_mean = NULL, time_sd = NULL, temp_profile = NULL)
-  )
-  
-  # Reactive value to track if model is running
   model_running <- reactiveVal(FALSE)
-  
-  # Reactive value to store model results
-  spoil_stats_result <- reactiveVal(NULL)
-  
-  # Render Question 1 UI (APC data)
-  output$question1_ui <- renderUI({
-    tagList(
-      h4("Microbial Data"),
-      radioButtons(
-        inputId = "has_apc_data",
-        label = "Do you have APC (Aerobic Plate Count) data for bulk tank raw milk?",
-        choices = list("Yes" = "yes", "No" = "no"),
-        selected = character(0)
-      ),
+  spoil_result <- reactiveVal(NULL)
 
-      # If yes: choose input method
-      conditionalPanel(
-        condition = "input.has_apc_data == 'yes'",
-        radioButtons(
-          inputId = "apc_input_method",
-          label = "How would you like to provide APC data?",
-          choices = list(
-            "Enter mean and SD" = "manual",
-            "Upload CSV file" = "csv"
-          ),
-          selected = "manual"
-        ),
+  # Per-container metrics: lot-level totals divided by n_units (containers per lot)
+  compute_economics <- function(result) {
+    sl <- result$shelf_life
+    container_volume_L <- 1.893 # half-gallon
 
-        # Manual entry
-        conditionalPanel(
-          condition = "input.apc_input_method == 'manual'",
-          numericInput("apc_manual_mean", "Mean (log10 CFU/mL):", value = 3.52, min = 0, max = 5, step = 0.01),
-          numericInput("apc_manual_sd", "SD (log10 CFU/mL):", value = 0.70, min = 0, max = 2, step = 0.01)
-        ),
+    shelf_life_value_usd <- if (is.finite(sl$consumer_days)) {
+      round(sl$consumer_days * 0.03, 2)
+    } else NA_real_
 
-        # CSV upload
-        conditionalPanel(
-          condition = "input.apc_input_method == 'csv'",
-          fileInput("apc_csv_file",
-            tagList(
-              "Upload APC measurements (CSV):",
-              tags$span(
-                icon("info-circle", style = "margin-left: 5px; color: #B31B1B; cursor: help;"),
-                title = "Required format: CSV file with one column of APC values (CFU/mL or log10 CFU/mL). Column name should be 'apc', 'cfu', or 'count'. Raw CFU/mL values will be automatically log10-transformed."
-              )
-            ),
-            accept = ".csv"),
-          uiOutput("apc_csv_feedback")
-        )
-      ),
+    retail_frac <- sl$pct_spoiled_at_retail / 100
+    consumer_frac <- max(0, sl$threshold_pct / 100 - retail_frac)
+    co2e_kg <- round(retail_frac * container_volume_L * 0.55 +
+                      consumer_frac * container_volume_L * 0.20, 3)
 
-      # If no: show default message
-      conditionalPanel(
-        condition = "input.has_apc_data == 'no'",
-        p(em(paste0("Using default values: mean = ", default_microbial$mean,
-                     ", SD = ", default_microbial$sd, " (log10 CFU/mL)")))
-      )
-    )
-  })
-  
-  # Render Question 2 UI
-  output$question2_ui <- renderUI({
-    if (!q1_completed()) {
-      return(NULL)
+    list(shelf_life_value_usd = shelf_life_value_usd, co2e_kg = co2e_kg)
+  }
+
+  observeEvent(input$run_model, {
+    model_running(TRUE)
+    session$sendCustomMessage("toggle-running-indicator", TRUE)
+    on.exit({
+      model_running(FALSE)
+      session$sendCustomMessage("toggle-running-indicator", FALSE)
+    })
+
+    user_config <- config
+    user_config$sim_duration <- input$sim_duration
+    # Report day 42 in the Spoilage Summary as well. Set here, not in config.R,
+    # so the verification baselines (built on days 7-35) are unchanged. Days
+    # past sim_duration have no rows and are skipped by the summary loop.
+    user_config$output_days <- sort(unique(c(config$output_days, 42)))
+    if (identical(input$include_ppc, "yes")) {
+      user_config$P_ppc_min <- input$ppc_range[1]
+      user_config$P_ppc_max <- input$ppc_range[2]
+    } else {
+      user_config$P_ppc_min <- 0
+      user_config$P_ppc_max <- 0
     }
 
-    tagList(
-      br(),
-      hr(),
-      h4("Temperature Data"),
-      radioButtons(
-        inputId = "has_temperature_data",
-        label = "Do you have temperature data on any of the supply chain stages (e.g., processing facility, retail)?",
-        choices = list("Yes" = "yes", "No" = "no"),
-        selected = character(0)
-      ),
-      
-      # If yes, show checkboxes for supply chain stages
-      conditionalPanel(
-        condition = "input.has_temperature_data == 'yes'",
-        checkboxGroupInput(
-          inputId = "selected_stages",
-          label = "Select the supply chain stages you have data for:",
-          choices = c(
-            "Processing Facility" = "processing_facility",
-            "Transportation from facility to retail" = "transportation_facility_to_retail",
-            "Retail" = "retail",
-            "Transportation from retail to home" = "transportation_retail_to_home",
-            "Consumer" = "consumer"
-          )
-        ),
-        p(em("For stages not selected, default data will be used")),
-        br()
-      ),
-      
-      # If no, show default message
-      conditionalPanel(
-        condition = "input.has_temperature_data == 'no'",
-        p(em("Using default temperature data")),
-        br()
-      ),
-      
-      hr(),
-      h4("Disruption Scenarios (Optional)"),
-      selectInput("scenario_fs", "Facility Storage Scenario:",
-        choices = c("None (Baseline)" = "none",
-                    "S1: Storage Cooling System Disruption" = "s1",
-                    "S2: Delivery Delay" = "s2"),
-        selected = "none"),
-      selectInput("scenario_dl", "Delivery Scenario:",
-        choices = c("None (Baseline)" = "none",
-                    "S3: Temp Increase (Trunk Opening)" = "s3",
-                    "S4: Delivery Cooling System Disruption" = "s4"),
-        selected = "none"),
+    interventions <- list()
+    if (identical(input$has_apc_data, "yes")) {
+      apc_vals <- if (identical(input$apc_input_method, "csv")) {
+        process_apc_csv(input$apc_csv_file)
+      } else if (!is.null(input$apc_manual_mean) && !is.na(input$apc_manual_mean) &&
+                 !is.null(input$apc_manual_sd) && !is.na(input$apc_manual_sd)) {
+        list(mean = input$apc_manual_mean, sd = input$apc_manual_sd)
+      } else {
+        NULL
+      }
 
-      # Navigation buttons for Question 2
-      conditionalPanel(
-        condition = "input.has_temperature_data != ''",
-        br(),
-        actionButton("back_q1", "Back", class = "btn-default"),
-        actionButton("next_q2", "Continue", class = "btn-primary")
-      )
-    )
-  })
-
-  # Render input section (left panel: file uploads + submit)
-  output$input_section <- renderUI({
-    if (!q2_completed()) {
-      return(NULL)
-    }
-
-    box(
-      width = 12,
-      title = "Supply Chain Data Input",
-      status = "danger",
-      solidHeader = TRUE,
-      uiOutput("stage_panels"),
-      hr(),
-      numericInput("containers_per_lot", "Containers per lot (half-gallon):",
-                   value = 1000, min = 1, step = 100),
-      actionButton("submit", "Predict", class = "btn-primary")
-    )
-  })
-
-  # Render output section (right panel: summary + results)
-  output$output_section <- renderUI({
-    if (!q2_completed()) {
-      return(NULL)
-    }
-
-    tagList(
-      box(
-        width = 12,
-        title = "Summary",
-        status = "danger",
-        solidHeader = TRUE,
-        collapsible = TRUE,
-        tableOutput("summary_table")
-      ),
-      uiOutput("metric_value_boxes"),
-      box(
-        width = 12,
-        title = "Predicted Spoilage Over Time",
-        status = "danger",
-        solidHeader = TRUE,
-        plotOutput("spoilage_plot", height = "400px")
-      ),
-      box(
-        width = 12,
-        title = "Spoilage Statistics",
-        status = "danger",
-        solidHeader = TRUE,
-        collapsible = TRUE,
-        div(style = "overflow-x: auto;", uiOutput("spoil_stats_ui"))
-      )
-    )
-  })
-  
-  # Handle navigation buttons
-  observeEvent(input$back_q1, {
-    q2_completed(FALSE)
-    q1_completed(FALSE)
-    updateRadioButtons(session, "has_temperature_data", selected = character(0))
-    updateCheckboxGroupInput(session, "selected_stages", selected = character(0))
-    updateRadioButtons(session, "has_apc_data", selected = character(0))
-    apc_mean(default_microbial$mean)
-    apc_sd(default_microbial$sd)
-    apc_source("Baseline")
-  })
-  
-  observeEvent(input$next_q2, {
-    # Validate Question 2 before proceeding
-    if (is.null(input$has_temperature_data) || input$has_temperature_data == "") {
-      showModal(modalDialog(
-        title = "Validation Error",
-        "Please answer Question 2 first.",
-        easyClose = TRUE
-      ))
-      return()
-    }
-    
-    if (input$has_temperature_data == "yes") {
-      if (is.null(input$selected_stages) || length(input$selected_stages) == 0) {
+      if (!is.null(apc_vals)) {
+        interventions$apc_mean <- apc_vals$mean
+        interventions$apc_sd <- apc_vals$sd
+      } else if (identical(input$apc_input_method, "csv")) {
         showModal(modalDialog(
-          title = "Validation Error",
-          "Please select at least one supply chain stage.",
+          title = "APC CSV Error",
+          "Could not extract APC values from the uploaded CSV. Ensure it has a numeric column named 'apc', 'cfu', or 'count'.",
           easyClose = TRUE
         ))
         return()
       }
     }
-    q2_completed(TRUE)
-  })
-
-  # Observe file uploads and extract statistics for each stage
-  observeEvent(input$csv_file_processing_facility, {
-    if (!is.null(input$csv_file_processing_facility)) {
-      file_stats <- process_csv_file(input$csv_file_processing_facility)
-      stage_stats$processing_facility$temp_mean <- file_stats$temperature$mean
-      stage_stats$processing_facility$temp_sd <- file_stats$temperature$sd
-      stage_stats$processing_facility$time_mean <- file_stats$time$mean
-      stage_stats$processing_facility$time_sd <- file_stats$time$sd
-      stage_stats$processing_facility$temp_profile <- file_stats$temp_profile
-    }
-  })
-  
-  observeEvent(input$csv_file_transportation_facility_to_retail, {
-    if (!is.null(input$csv_file_transportation_facility_to_retail)) {
-      file_stats <- process_csv_file(input$csv_file_transportation_facility_to_retail)
-      stage_stats$transportation_facility_to_retail$temp_mean <- file_stats$temperature$mean
-      stage_stats$transportation_facility_to_retail$temp_sd <- file_stats$temperature$sd
-      stage_stats$transportation_facility_to_retail$time_mean <- file_stats$time$mean
-      stage_stats$transportation_facility_to_retail$time_sd <- file_stats$time$sd
-      stage_stats$transportation_facility_to_retail$temp_profile <- file_stats$temp_profile
-    }
-  })
-  
-  observeEvent(input$csv_file_retail, {
-    if (!is.null(input$csv_file_retail)) {
-      file_stats <- process_csv_file(input$csv_file_retail)
-      stage_stats$retail$temp_mean <- file_stats$temperature$mean
-      stage_stats$retail$temp_sd <- file_stats$temperature$sd
-      stage_stats$retail$time_mean <- file_stats$time$mean
-      stage_stats$retail$time_sd <- file_stats$time$sd
-      stage_stats$retail$temp_profile <- file_stats$temp_profile
-    }
-  })
-  
-  observeEvent(input$csv_file_transportation_retail_to_home, {
-    if (!is.null(input$csv_file_transportation_retail_to_home)) {
-      file_stats <- process_csv_file(input$csv_file_transportation_retail_to_home)
-      stage_stats$transportation_retail_to_home$temp_mean <- file_stats$temperature$mean
-      stage_stats$transportation_retail_to_home$temp_sd <- file_stats$temperature$sd
-      stage_stats$transportation_retail_to_home$time_mean <- file_stats$time$mean
-      stage_stats$transportation_retail_to_home$time_sd <- file_stats$time$sd
-      stage_stats$transportation_retail_to_home$temp_profile <- file_stats$temp_profile
-    }
-  })
-  
-  observeEvent(input$csv_file_consumer, {
-    if (!is.null(input$csv_file_consumer)) {
-      file_stats <- process_csv_file(input$csv_file_consumer)
-      stage_stats$consumer$temp_mean <- file_stats$temperature$mean
-      stage_stats$consumer$temp_sd <- file_stats$temperature$sd
-      stage_stats$consumer$time_mean <- file_stats$time$mean
-      stage_stats$consumer$time_sd <- file_stats$time$sd
-      stage_stats$consumer$temp_profile <- file_stats$temp_profile
-    }
-  })
-  
-  # Process APC CSV upload
-  observeEvent(input$apc_csv_file, {
-    if (!is.null(input$apc_csv_file)) {
-      result <- process_apc_csv(input$apc_csv_file)
-      if (!is.null(result)) {
-        apc_mean(result$mean)
-        apc_sd(result$sd)
-        apc_source("User Upload (CSV)")
+    if (!identical(input$spore_reduction_choice, "none")) {
+      interventions$spore_reduction <- if (identical(input$spore_reduction_choice, "custom")) {
+        input$spore_reduction_custom
+      } else {
+        input$spore_reduction_choice
       }
     }
+    if (identical(input$include_ppc, "yes")) {
+      if (!is.null(input$ppc_initial_reduction_log) && !is.na(input$ppc_initial_reduction_log) &&
+          input$ppc_initial_reduction_log > 0) {
+        interventions$ppc_initial_reduction_log <- input$ppc_initial_reduction_log
+      }
+      if (!is.null(input$ppc_remove_st) && length(input$ppc_remove_st) > 0) {
+        interventions$ppc_remove_st <- input$ppc_remove_st
+      }
+    }
+
+    # Per-stage uploaded time-temperature profile, if provided. Reuses the
+    # model's profile_csv disruption handler, which reads the CSV and derives
+    # mean/sd/duration/mode itself, so no manual entry is needed.
+    disruptions <- list()
+    for (stage in stage_ids) {
+      upload <- input[[id_for("override_csv_", stage)]]
+      if (!is.null(upload)) {
+        disruptions[[stage]] <- list(type = "profile_csv", path = upload$datapath,
+                                      source_filename = upload$name)
+      }
+    }
+
+    tryCatch({
+      set.seed(42)
+      result <- with_model_dir({
+        run_model(user_config = user_config, interventions = interventions, disruptions = disruptions)
+      })
+      spoil_result(result)
+    }, error = function(e) {
+      showModal(modalDialog(
+        title = "Model Error",
+        paste("An error occurred while running the model:", e$message),
+        easyClose = TRUE
+      ))
+    })
   })
 
-  # Show feedback for APC CSV
   output$apc_csv_feedback <- renderUI({
     if (is.null(input$apc_csv_file)) return(NULL)
     result <- process_apc_csv(input$apc_csv_file)
@@ -467,534 +462,154 @@ server <- function(input, output, session) {
         paste0("Extracted: mean = ", result$mean, ", SD = ", result$sd, " (log10 CFU/mL)"))
     } else {
       p(style = "color: red;",
-        "Could not extract APC values. Ensure CSV has a numeric column with APC measurements (CFU/mL or log10 CFU/mL).")
+        "Could not extract APC values. Ensure the CSV has a numeric column named 'apc', 'cfu', or 'count'.")
     }
   })
 
-  # Auto-complete Q1 when user answers
-  observeEvent(input$has_apc_data, {
-    if (!is.null(input$has_apc_data) && input$has_apc_data != "") {
-      if (input$has_apc_data == "no") {
-        apc_mean(default_microbial$mean)
-        apc_sd(default_microbial$sd)
-        apc_source("Baseline")
-        q1_completed(TRUE)
-      } else if (input$has_apc_data == "yes") {
-        if (!is.null(input$apc_input_method) && input$apc_input_method == "manual") {
-          apc_mean(input$apc_manual_mean)
-          apc_sd(input$apc_manual_sd)
-          apc_source("User Input (Manual)")
-        }
-        q1_completed(TRUE)
-      }
-    }
+  output$warnings_ui <- renderUI({
+    res <- spoil_result()
+    if (is.null(res) || length(res$warnings) == 0) return(NULL)
+    box(width = 12, title = "Model Warnings", status = "warning", solidHeader = TRUE,
+        tags$ul(lapply(res$warnings, tags$li)))
   })
 
-  # Update APC values when manual inputs change
-  observeEvent(c(input$apc_manual_mean, input$apc_manual_sd), {
-    if (!is.null(input$has_apc_data) && input$has_apc_data == "yes" &&
-        !is.null(input$apc_input_method) && input$apc_input_method == "manual") {
-      if (!is.null(input$apc_manual_mean) && !is.na(input$apc_manual_mean) &&
-          !is.null(input$apc_manual_sd) && !is.na(input$apc_manual_sd)) {
-        apc_mean(input$apc_manual_mean)
-        apc_sd(input$apc_manual_sd)
-        apc_source("User Input (Manual)")
-      }
-    }
-  })
-
-  # Dynamically generate panels for each selected stage
-  output$stage_panels <- renderUI({
-    # Show panels only if user has temperature data and selected stages, or if they don't have data (use defaults)
-    if (!is.null(input$has_temperature_data) && input$has_temperature_data == "yes" && !is.null(input$selected_stages) && length(input$selected_stages) > 0) {
-      lapply(input$selected_stages, function(stage) {
-        stage_label <- get_stage_label(stage)
-        
-        wellPanel(
-          h4(stage_label),
-          
-          fileInput(
-            inputId = paste0("csv_file_", stage),
-            label = tagList(
-              paste("Upload the time-temperature profile for", stage_label, "(CSV file):"),
-              tags$span(
-                icon("info-circle", style = "margin-left: 5px; color: #B31B1B; cursor: help;"),
-                title = "Required format: CSV file with two columns only - 'time' and 'temperature'. Recommended time format: YYYY-MM-DD HH:MM:SS (e.g., 2024-01-15 10:30:00) or numeric days. Other date formats are also supported."
-              )
-            ),
-            accept = ".csv"
-          )
-        )
-      })
-    } else if (!is.null(input$has_temperature_data) && input$has_temperature_data == "no") {
-      # Show message that default data will be used
-      wellPanel(
-        h4("Using Default Temperature Data"),
-        p("Default temperature data will be used for all supply chain stages.")
-      )
-    }
-  })
-  
-  # Summarize the input data
-  output$summary_table <- renderTable({
-    # Show summary based on what data is available
-    summary_rows <- list()
-    
-    # Add microbial concentration data summary
-    summary_rows[[length(summary_rows) + 1]] <- data.frame(
-      `Supply Chain Stage` = "Bulk tank",
-      `Data Type` = "Microbial Concentration",
-      Source = apc_source(),
-      Mean = as.character(round(apc_mean(), 2)),
-      SD = as.character(round(apc_sd(), 2)),
-      Unit = "log10 CFU/mL",
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-    
-    # Add temperature and time data summary - show all stages individually
-    all_stages <- get_all_stages()
-    
-    if (!is.null(input$has_temperature_data) && input$has_temperature_data == "yes" && !is.null(input$selected_stages) && length(input$selected_stages) > 0) {
-      # User has temperature data - show selected stages with their data, and non-selected with defaults
-      for (stage in all_stages) {
-        stage_label <- get_stage_label(stage)
-        if (stage %in% input$selected_stages) {
-          # Stage was selected - check if file was uploaded
-          file <- input[[paste0("csv_file_", stage)]]
-          source <- ifelse(!is.null(file), "User Upload", "Baseline")
-          
-          # Extract temperature and time data from uploaded CSV file
-          temp_mean <- "N/A"
-          temp_sd <- "N/A"
-          time_mean <- "N/A"
-          time_sd <- "N/A"
-          
-          # Process uploaded CSV file
-          if (!is.null(file)) {
-            file_stats <- process_csv_file(file)
-            temp_mean <- file_stats$temperature$mean
-            temp_sd <- file_stats$temperature$sd
-            time_mean <- file_stats$time$mean
-            time_sd <- file_stats$time$sd
-          }
-          
-          # If no file uploaded but stage was selected, use defaults
-          if (source == "Baseline") {
-            temp_params <- get_default_params(stage, "temperature")
-            temp_mean <- temp_params$mean
-            temp_sd <- temp_params$sd
-            time_params <- get_default_params(stage, "time")
-            time_mean <- time_params$mean
-            time_sd <- time_params$sd
-          }
-        } else {
-          # Stage was not selected - use default parameters
-          source <- "Baseline"
-          temp_params <- get_default_params(stage, "temperature")
-          temp_mean <- temp_params$mean
-          temp_sd <- temp_params$sd
-          time_params <- get_default_params(stage, "time")
-          time_mean <- time_params$mean
-          time_sd <- time_params$sd
-        }
-
-        # Check if a scenario overrides this stage
-        scenario_key <- NULL
-        if (stage == "processing_facility" && !is.null(input$scenario_fs) && input$scenario_fs != "none") {
-          scenario_key <- input$scenario_fs
-        } else if (stage == "transportation_facility_to_retail" && !is.null(input$scenario_dl) && input$scenario_dl != "none") {
-          scenario_key <- input$scenario_dl
-        }
-        if (!is.null(scenario_key) && !is.null(scenario_profiles[[scenario_key]])) {
-          sp <- scenario_profiles[[scenario_key]]$profile
-          source <- paste0("Scenario (", scenario_profiles[[scenario_key]]$label, ")")
-          temp_mean <- round(mean(sp$temperature), 4)
-          temp_sd <- round(sd(sp$temperature), 4)
-          time_mean <- round(max(sp$time_days), 4)
-          time_sd <- 0
-        }
-
-        # Add Temperature row
-        summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Temperature", source, temp_mean, temp_sd, "degree C"
-        )
-
-        # Add Time row
-        summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Time", source, time_mean, time_sd, "day"
-        )
-      }
-    } else if (!is.null(input$has_temperature_data) && input$has_temperature_data == "no") {
-      # User doesn't have temperature data - show all stages with default parameters
-      for (stage in all_stages) {
-        stage_label <- get_stage_label(stage)
-
-        # Get default parameters
-        temp_params <- get_default_params(stage, "temperature")
-        time_params <- get_default_params(stage, "time")
-
-        source <- "Baseline"
-
-        # Check if a scenario overrides this stage
-        scenario_key <- NULL
-        if (stage == "processing_facility" && !is.null(input$scenario_fs) && input$scenario_fs != "none") {
-          scenario_key <- input$scenario_fs
-        } else if (stage == "transportation_facility_to_retail" && !is.null(input$scenario_dl) && input$scenario_dl != "none") {
-          scenario_key <- input$scenario_dl
-        }
-        if (!is.null(scenario_key) && !is.null(scenario_profiles[[scenario_key]])) {
-          sp <- scenario_profiles[[scenario_key]]$profile
-          source <- paste0("Scenario (", scenario_profiles[[scenario_key]]$label, ")")
-          temp_params$mean <- round(mean(sp$temperature), 4)
-          temp_params$sd <- round(sd(sp$temperature), 4)
-          time_params$mean <- round(max(sp$time_days), 4)
-          time_params$sd <- 0
-        }
-
-        # Add Temperature row
-        summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Temperature", source, temp_params$mean, temp_params$sd, "degree C"
-        )
-
-        # Add Time row
-        summary_rows[[length(summary_rows) + 1]] <- create_summary_row(
-          stage_label, "Time", source, time_params$mean, time_params$sd, "day"
-        )
-      }
-    }
-    
-    if (length(summary_rows) == 0) {
-      return(data.frame(Message = "No data entered yet."))
-    }
-    
-    do.call(rbind, summary_rows)
-  })
-  
-  # Output to track if model is running (for conditionalPanel)
-  output$model_running <- reactive({
-    model_running()
-  })
-  outputOptions(output, "model_running", suspendWhenHidden = FALSE)
-
-  output$q1_completed_flag <- reactive({ q1_completed() })
-  outputOptions(output, "q1_completed_flag", suspendWhenHidden = FALSE)
-
-  # Render spoilage statistics UI with loading indicator
-  output$spoil_stats_ui <- renderUI({
+  output$metric_boxes <- renderUI({
     if (model_running()) {
-      return(
-        div(
-          style = "text-align: center; padding: 20px;",
-          tags$div(
-            class = "spinner-border spinner-border-lg",
-            role = "status",
-            style = "color: #541E1B;",
-            tags$span(class = "sr-only", "Loading...")
-          ),
-          br(),
-          br(),
-          tags$p("Running model... This may take a few moments.", style = "color: #666;")
-        )
-      )
-    } else if (!is.null(spoil_stats_result())) {
-      return(tableOutput("spoil_stats_table"))
+      return(div(style = "text-align: center; padding: 20px;",
+                 tags$div(class = "spinner-border spinner-border-lg", role = "status",
+                          style = "color: #541E1B;", tags$span(class = "sr-only", "Loading...")),
+                 br(), br(),
+                 tags$p("Running model... this may take a few moments.", style = "color: #666;")))
+    }
+
+    res <- spoil_result()
+    if (is.null(res)) {
+      return(p(em("Configure your settings on the left and click 'Run Simulation' to see results."),
+               style = "color: #666;"))
+    }
+
+    sl <- res$shelf_life
+    econ <- compute_economics(res)
+    sim_duration <- res$scenario$config$sim_duration
+
+    consumer_days_text <- if (is.finite(sl$consumer_days)) {
+      sprintf("%.1f days", sl$consumer_days)
     } else {
-      return(
-        tags$p("Click 'Predict' to run the model and view spoilage statistics.", 
-               style = "color: #666; font-style: italic;")
-      )
+      paste0("> ", round(sim_duration - sl$pre_consumer_days, 1), " days")
     }
-  })
-  
-  # Observe the submit button and run the model
-  observeEvent(input$submit, {
-    # Validate that preliminary questions are answered
-    if (is.null(input$has_temperature_data) || input$has_temperature_data == "") {
-      showModal(modalDialog(
-        title = "Error",
-        "Please complete Question 2 first.",
-        easyClose = TRUE
-      ))
-      return()
-    }
-    
-    if (input$has_temperature_data == "yes" && (is.null(input$selected_stages) || length(input$selected_stages) == 0)) {
-      showModal(modalDialog(
-        title = "Error",
-        "Please select at least one supply chain stage.",
-        easyClose = TRUE
-      ))
-      return()
-    }
-    
-    # Set model as running
-    model_running(TRUE)
-    spoil_stats_result(NULL)
-    
-    # Get selected stages (stages with user-submitted data)
-    selected_stages <- NULL
-    if (input$has_temperature_data == "yes" && !is.null(input$selected_stages) && length(input$selected_stages) > 0) {
-      selected_stages <- input$selected_stages
-    }
+    econ_text <- if (!is.na(econ$shelf_life_value_usd)) {
+      paste0("$", format(econ$shelf_life_value_usd, nsmall = 2, big.mark = ","))
+    } else "N/A"
 
-    # Run the model with progress tracking
-    tryCatch({
-      withProgress(
-        message = "Running spoilage model",
-        value = 0,
-        {
-          # Create progress callback function
-          progress_callback <- function(message, value) {
-            setProgress(value = value, detail = message)
-          }
-
-          # Only pass APC params if user provided custom data
-          user_apc_mean <- if (apc_source() != "Baseline") apc_mean() else NULL
-          user_apc_sd <- if (apc_source() != "Baseline") apc_sd() else NULL
-
-          # Build scenario overrides (applied after user data in model)
-          scenario_overrides <- list()
-          if (!is.null(input$scenario_fs) && input$scenario_fs != "none") {
-            key <- input$scenario_fs
-            if (!is.null(scenario_profiles[[key]])) {
-              scenario_overrides[[scenario_profiles[[key]]$stage]] <- scenario_profiles[[key]]$profile
-            }
-          }
-          if (!is.null(input$scenario_dl) && input$scenario_dl != "none") {
-            key <- input$scenario_dl
-            if (!is.null(scenario_profiles[[key]])) {
-              scenario_overrides[[scenario_profiles[[key]]$stage]] <- scenario_profiles[[key]]$profile
-            }
-          }
-
-          # Warn if scenario overrides user data
-          for (stage in names(scenario_overrides)) {
-            if (!is.null(selected_stages) && stage %in% selected_stages) {
-              showNotification(
-                paste0("Note: Disruption scenario overrides your uploaded data for ", get_stage_label(stage), "."),
-                type = "warning", duration = 8
-              )
-            }
-          }
-
-          # Fixed seed ensures reproducible results and consistent
-          # baseline vs scenario comparisons (same random draws)
-          set.seed(42)
-
-          result <- run_spoilage_model(
-            ModelData_BCLc_input = ModelData_BCLc_input,
-            ModelData_D_input = ModelData_D_input,
-            stage_stats = stage_stats,
-            selected_stages = selected_stages,
-            apc_mean = user_apc_mean,
-            apc_sd = user_apc_sd,
-            default_profiles = default_profiles,
-            scenario_overrides = scenario_overrides,
-            progress_callback = progress_callback
-          )
-          
-          # Store results
-          spoil_stats_result(result)
-          model_running(FALSE)
-        }
-      )
-    }, error = function(e) {
-      model_running(FALSE)
-      showModal(modalDialog(
-        title = "Model Error",
-        paste("An error occurred while running the model:", e$message),
-        easyClose = TRUE
-      ))
-    })
-  })
-  
-  # Render spoilage plot
-  output$spoilage_plot <- renderPlot({
-    if (is.null(spoil_stats_result())) {
-      return(NULL)
-    }
-
-    result <- spoil_stats_result()$SpoilStats_all
-    plot_data <- data.frame(
-      Day = as.numeric(result$Day),
-      Median = result$Median_Proportion * 100,
-      P25 = result$p25 * 100,
-      P75 = result$p75 * 100
+    fluidRow(
+      column(width = 6,
+        box(width = 12, title = "Pre-Consumer Spoilage", status = "danger", solidHeader = TRUE,
+            h3(sprintf("%.1f%%", sl$pct_spoiled_at_retail), style = "text-align: center; margin: 10px 0;"),
+            p("Containers spoiled before consumer purchase", style = "text-align: center; color: #777;"))),
+      column(width = 6,
+        box(width = 12, title = "Consumer Shelf Life", status = "danger", solidHeader = TRUE,
+            h3(consumer_days_text, style = "text-align: center; margin: 10px 0;"),
+            p(sprintf("Days to %.0f%% lot spoilage", sl$threshold_pct), style = "text-align: center; color: #777;"))),
+      column(width = 6,
+        box(width = 12, title = "Economic Value", status = "danger", solidHeader = TRUE,
+            h3(econ_text, style = "text-align: center; margin: 10px 0;"),
+            p("Shelf-life value per container (Lau et al. 2023)", style = "text-align: center; color: #777;"))),
+      column(width = 6,
+        box(width = 12, title = "Environmental Emission", status = "danger", solidHeader = TRUE,
+            h3(paste0(econ$co2e_kg, " kg CO₂e"), style = "text-align: center; margin: 10px 0;"),
+            p("Estimated waste emissions per container (EPA WARM)", style = "text-align: center; color: #777;")))
     )
-
-    p <- ggplot(plot_data, aes(x = Day)) +
-      geom_ribbon(aes(ymin = P25, ymax = P75), fill = "#B31B1B", alpha = 0.2) +
-      geom_line(aes(y = Median), color = "#B31B1B", linewidth = 1.2) +
-      geom_point(aes(y = Median), color = "#B31B1B", size = 3) +
-      scale_x_continuous(breaks = plot_data$Day) +
-      scale_y_continuous(limits = c(0, max(100, max(plot_data$P75) + 5)),
-                         breaks = sort(unique(c(seq(0, 100, 25))))) +
-      labs(
-        x = "Day",
-        y = "Predicted Spoiled (%)",
-        caption = "Shaded region: 25th-75th percentile range"
-      ) +
-      theme_minimal(base_size = 14) +
-      theme(
-        plot.title = element_text(face = "bold"),
-        panel.grid.minor = element_blank()
-      )
-
-    p
   })
 
-  # Render spoilage statistics table
-  output$spoil_stats_table <- renderTable({
-    if (is.null(spoil_stats_result())) {
-      return(NULL)
+  output$spoilage_plot_ui <- renderUI({
+    if (is.null(spoil_result())) {
+      return(p(em("No results yet."), style = "color: #666;"))
     }
-    
-    # Format the table nicely
-    result <- spoil_stats_result()$SpoilStats_all
+    plotOutput("spoilage_plot", height = "400px")
+  })
 
-    # Convert proportions to percentages for better readability
-    result_formatted <- data.frame(
-      Day = result$Day,
-      `Median (%)` = round(result$Median_Proportion * 100, 2),
-      `Mean (%)` = round(result$Mean_Proportion * 100, 2),
-      `SD (%)` = round(result$SD_proportion * 100, 2),
-      `P5 (%)` = round(result$p05 * 100, 2),
-      `P25 (%)` = round(result$p25 * 100, 2),
-      `P75 (%)` = round(result$p75 * 100, 2),
-      `P95 (%)` = round(result$p95 * 100, 2),
-      `Median QBU` = round(result$Median_Bacterial_Concentration, 2),
-      `P25 QBU` = round(result$p25_Bacterial_Concentration, 2),
-      `P75 QBU` = round(result$p75_Bacterial_Concentration, 2),
-      stringsAsFactors = FALSE,
+  output$spoilage_plot <- renderPlot({
+    res <- spoil_result()
+    if (is.null(res)) return(NULL)
+
+    d <- res$daily_median_spoilage
+    threshold <- res$shelf_life$threshold_pct
+
+    ggplot(d, aes(x = day)) +
+      geom_ribbon(aes(ymin = P25, ymax = P75), fill = "#B31B1B", alpha = 0.2) +
+      geom_line(aes(y = median_pct), color = "#B31B1B", linewidth = 1.2) +
+      geom_point(aes(y = median_pct), color = "#B31B1B", size = 1.5) +
+      geom_hline(yintercept = threshold, linetype = "dashed", color = "gray40") +
+      annotate("text", x = max(d$day) * 0.95, y = threshold + 3,
+               label = paste0(threshold, "% threshold"), hjust = 1, size = 3.5, color = "gray40") +
+      scale_x_continuous(breaks = seq(0, max(d$day), by = 7)) +
+      scale_y_continuous(limits = c(0, 100)) +
+      labs(x = "Day", y = "Predicted Spoiled (%)",
+           caption = "Shaded region: 25th-75th percentile range") +
+      theme_minimal(base_size = 14) +
+      theme(panel.grid.minor = element_blank())
+  })
+
+  output$summary_table_ui <- renderUI({
+    if (is.null(spoil_result())) {
+      return(p(em("No results yet."), style = "color: #666;"))
+    }
+    tagList(
+      h5("Containers spoiled per lot (%)"),
+      tableOutput("summary_table"),
+      h5("Microbial concentration across all simulated containers (log10 CFU/mL)"),
+      tableOutput("concentration_table")
+    )
+  })
+
+  output$concentration_table <- renderTable({
+    res <- spoil_result()
+    if (is.null(res)) return(NULL)
+    s <- res$spoilage_summary
+    data.frame(
+      Day = s$day,
+      Median = s$conc_median_log10,
+      P5 = s$conc_P5_log10,
+      P25 = s$conc_P25_log10,
+      P75 = s$conc_P75_log10,
+      P95 = s$conc_P95_log10,
       check.names = FALSE
     )
-    
-    result_formatted
   }, digits = 2)
 
-  # Render metric value boxes
-  output$metric_value_boxes <- renderUI({
-    if (is.null(spoil_stats_result())) {
-      return(NULL)
-    }
-
-    result <- spoil_stats_result()
-
-    pct_retail <- result$pct_spoiled_at_retail
-    days_25 <- result$days_to_25pct_consumer
-    days_text <- if (is.na(days_25)) paste0("> ", 35, " days") else paste0(days_25, " days")
-
-    # Row 1: existing metric boxes
-    row1 <- fluidRow(
-      column(
-        width = 6,
-        box(
-          width = 12,
-          title = "Pre-Consumer Spoilage",
-          status = "danger",
-          solidHeader = TRUE,
-          h3(paste0(pct_retail, "%"), style = "text-align: center; margin: 10px 0;"),
-          p("Containers spoiled before consumer purchase",
-            style = "text-align: center; color: #777;")
-        )
-      ),
-      column(
-        width = 6,
-        box(
-          width = 12,
-          title = "Consumer Shelf Life",
-          status = "danger",
-          solidHeader = TRUE,
-          h3(days_text, style = "text-align: center; margin: 10px 0;"),
-          p("Consumer storage days until 25% of containers spoiled",
-            style = "text-align: center; color: #777;")
-        )
-      )
+  output$summary_table <- renderTable({
+    res <- spoil_result()
+    if (is.null(res)) return(NULL)
+    s <- res$spoilage_summary
+    data.frame(
+      Day = s$day,
+      `Median (%)` = round(s$median_pct_spoiled, 2),
+      `Mean (%)` = round(s$mean_pct_spoiled, 2),
+      `SD (%)` = round(s$sd, 2),
+      `P5 (%)` = round(s$P5, 2),
+      `P25 (%)` = round(s$P25, 2),
+      `P75 (%)` = round(s$P75, 2),
+      `P95 (%)` = round(s$P95, 2),
+      check.names = FALSE
     )
+  }, digits = 2)
 
-    # Row 2: economic/environmental comparison (only when baseline stored + scenario active)
-    has_scenario <- (!is.null(input$scenario_fs) && input$scenario_fs != "none") ||
-                    (!is.null(input$scenario_dl) && input$scenario_dl != "none")
-    baseline <- baseline_result()
+  output$applied_ui <- renderUI({
+    res <- spoil_result()
+    if (is.null(res)) return(p(em("No results yet."), style = "color: #666;"))
 
-    if (!is.null(baseline) && has_scenario) {
-      containers <- input$containers_per_lot
-      vol_per_container <- 1.893  # half gallon in liters
-
-      # --- Economic Loss ---
-      b_days <- baseline$days_to_25pct_consumer
-      s_days <- result$days_to_25pct_consumer
-
-      if (!is.na(b_days) && !is.na(s_days)) {
-        delta_days <- b_days - s_days
-        b_econ <- round(b_days * 0.03 * containers, 2)
-        s_econ <- round(s_days * 0.03 * containers, 2)
-        econ_loss <- round(delta_days * 0.03 * containers, 2)
-        econ_headline <- paste0("$", format(econ_loss, nsmall = 2, big.mark = ","), " per lot")
-        econ_subtitle <- paste0("Baseline: $", format(b_econ, nsmall = 2, big.mark = ","),
-                                " | Scenario: $", format(s_econ, nsmall = 2, big.mark = ","))
-      } else {
-        econ_headline <- "N/A"
-        econ_subtitle <- "Shelf life could not be determined for baseline or scenario"
-      }
-
-      # --- Environmental Emission ---
-      # Evaluate spoilage at baseline's consumer shelf-life days
-      # using per-container consumer spoil times (not absolute days)
-      ref_consumer_days <- baseline$days_to_25pct_consumer
-
-      if (!is.na(ref_consumer_days)) {
-        compute_co2e <- function(res, consumer_days, n) {
-          retail_frac <- res$pct_spoiled_at_retail / 100
-          total_frac <- mean(res$consumer_spoil_times <= consumer_days)
-          consumer_frac <- max(0, total_frac - retail_frac)
-          retail_L <- retail_frac * n * vol_per_container
-          consumer_L <- consumer_frac * n * vol_per_container
-          retail_L * 0.55 + consumer_L * 0.2
-        }
-
-        b_co2e <- compute_co2e(baseline, ref_consumer_days, containers)
-        s_co2e <- compute_co2e(result, ref_consumer_days, containers)
-        delta_co2e <- s_co2e - b_co2e
-
-        env_headline <- paste0(sprintf("%+.1f", delta_co2e), " kg CO\u2082e per lot")
-        env_subtitle <- paste0("Baseline: ", round(b_co2e, 1), " kg",
-                               " | Scenario: ", round(s_co2e, 1), " kg")
-      } else {
-        env_headline <- "N/A"
-        env_subtitle <- "Baseline consumer shelf life could not be determined"
-      }
-
-      row2 <- fluidRow(
-        column(
-          width = 6,
-          box(
-            width = 12,
-            title = "Economic Loss",
-            status = "danger",
-            solidHeader = TRUE,
-            h3(econ_headline, style = "text-align: center; margin: 10px 0;"),
-            p(econ_subtitle, style = "text-align: center; color: #777;")
-          )
-        ),
-        column(
-          width = 6,
-          box(
-            width = 12,
-            title = "Environmental Emission",
-            status = "danger",
-            solidHeader = TRUE,
-            h3(env_headline, style = "text-align: center; margin: 10px 0;"),
-            p(env_subtitle, style = "text-align: center; color: #777;")
-          )
-        )
-      )
-
-      tagList(row1, row2)
-    } else {
-      row1
+    ia <- res$scenario$interventions_applied
+    da <- res$scenario$disruptions_applied
+    if (length(ia) == 0 && length(da) == 0) {
+      return(p(em("No interventions or disruptions applied — baseline run.")))
     }
+
+    tagList(
+      if (length(ia) > 0) tagList(h5("Interventions applied:"),
+        tags$pre(paste(capture.output(str(ia)), collapse = "\n"))),
+      if (length(da) > 0) tagList(h5("Disruptions applied:"),
+        tags$pre(paste(capture.output(str(da)), collapse = "\n")))
+    )
   })
 }
 

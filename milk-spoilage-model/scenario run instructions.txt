@@ -1,0 +1,41 @@
+I want you to run App.R in a couple of different ways, described below and save the results into two csv files. All csv files created as a reults of this prompt file can be saved in the folder "\milk-spoilage-model\output"
+
+The first csv file should be named "Simulated count and spoilage results no PPC.csv" and contain the results displayed in the "Spoilage Summary" panel from each run. The columns of this csv file should be named the following: 
+
+scenario	day	spoiled_median	spoiled_mean	spoiled_sd	spoiled_p05	spoiled_p25	spoiled_p75	spoiled_95	conc_median	conc_p5	conc_p25	conc_p75	conc_p95 
+
+
+The second csv file should be named "Secondary model output metrics no PPC.csv"
+
+scenario	consumer_sl	preconsumer_spoilage_perc	econ_value	env_emiss
+
+Run App.R in the following ways.
+1. Run without any modifications and put in BL as entry in the Scenario column when saving into the csv files
+2. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s1_storage_cooling_disruption.csv" in the "Processing Facility" upload field of the "Custom Time-Temperature Data (Optional)" Panel, keep everything else in the Default Settings, put in S1 as entry in the Scenario column when saving into the csv files
+3. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s2_delivery_delay.csv" in the "Processing Facility" upload field of the "Custom Time-Temperature Data (Optional)" Panel, keep everything else in the Default Settings, put in S2 as entry in the Scenario column when saving into the csv files
+4. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s3_trunk_opening.csv" in the "Transport: Facility -> Retail" upload field of the "Custom Time-Temperature Data (Optional)" Panel, keep everything else in the Default Settings, put in S3 as entry in the Scenario column when saving into the csv files
+5. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s4_delivery_cooling_disruption.csv" in the "Transport: Facility -> Retail" upload field of the "Custom Time-Temperature Data (Optional)" Panel, keep everything else in the Default Settings, put in S4 as entry in the Scenario column when saving into the csv files
+
+After you finished running App.R with the instructions above, I want you to run the App after the following instructions:
+
+
+Run App.R in a couple of different ways, described below and save the results into two csv files
+ 
+The first csv file should be named "Simulated count and spoilage results PPC.csv" and contain the results displayed in the "Spoilage Summary" panel from each run. The columns of this csv file should be named the following: 
+
+scenario	day	spoiled_median	spoiled_mean	spoiled_sd	spoiled_p05	spoiled_p25	spoiled_p75	spoiled_95	conc_median	conc_p5	count_p25	conc_p75	conc_p95 
+
+
+The second csv file should be named "Secondary model output metrics PPC.csv"
+
+scenario	consumer_sl	preconsumer_spoilage_perc	econ_value	env_emiss
+
+Run App.R in the following ways.
+1. Run without any modifications and put in BL as entry in the Scenario column when saving into the csv files
+2. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s1_storage_cooling_disruption.csv" in the "Processing Facility" upload field of the "Custom Time-Temperature Data (Optional)" Panel, set the min and max of the "PPC proportion of containers per lot (min - max)" slider in the "Post-Pasteurization Contamination (PPC) panel to 1, put in S1 as entry in the Scenario column when saving into the csv files
+3. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s2_delivery_delay.csv" in the "Processing Facility" upload field of the "Custom Time-Temperature Data (Optional)" Panel, set the min and max of the "PPC proportion of containers per lot (min - max)" slider in the "Post-Pasteurization Contamination (PPC) panel to 1, put in S2 as entry in the Scenario column when saving into the csv files
+4. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s3_trunk_opening.csv" in the "Transport: Facility -> Retail" upload field of the "Custom Time-Temperature Data (Optional)" Panel, set the min and max of the "PPC proportion of containers per lot (min - max)" slider in the "Post-Pasteurization Contamination (PPC) panel to 1, put in S3 as entry in the Scenario column when saving into the csv files
+5. Run, but upload  the file "\milk-spoilage-model\input_data\scenario_s4_delivery_cooling_disruption.csv" in the "Transport: Facility -> Retail" upload field of the "Custom Time-Temperature Data (Optional)" Panel, set the min and max of the "PPC proportion of containers per lot (min - max)" slider in the "Post-Pasteurization Contamination (PPC) panel to 1, put in S4 as entry in the Scenario column when saving into the csv files
+
+
+

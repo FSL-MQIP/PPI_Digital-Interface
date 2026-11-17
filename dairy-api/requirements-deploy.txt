@@ -1,0 +1,13 @@
+# Dependencies for deploy_space.py only. Install with:
+#     pip install -r dairy-api/requirements-deploy.txt
+#
+# Separate from requirements.txt because that file is what the Dockerfile
+# installs into the image, and the deploy helper never runs inside the image --
+# it is what pushes the image's source to a Space from a developer machine.
+# Putting huggingface_hub there would add six packages (filelock, fsspec,
+# hf-xet, huggingface-hub, pyyaml, tqdm) to every container that can never use
+# them.
+#
+# Nothing from requirements.txt is needed here: deploy_space.py imports only
+# argparse, sys, pathlib and huggingface_hub.
+huggingface_hub>=0.34
